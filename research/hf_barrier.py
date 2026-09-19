@@ -180,8 +180,8 @@ def main():
                 mk = (pp >= a) & (pp <= b); cal.append((round(float(a), 3), round(float(b), 3), round(float(act[mk].mean()), 3), int(mk.sum())))
             row["보정(예측확률 구간→실제 승률, n)"] = cal
             res[cname]["years"][Y] = row
-            print(sym, cname, Y, "base", row["base_win_long"], row["base_win_short"], "be", round(be, 3), json.dumps(row["taus"], ensure_ascii=False)[:400], f"{time.time()-t0:.0f}s", flush=True)
-    Path(f"logs/hf_{sym[:3]}_{'_'.join(cfgs)}{'_shuf' if shuffle else ''}.json").write_text(json.dumps(res, indent=1, ensure_ascii=False))
+            print(sym, cname, Y, "base", row["base_win_long"], row["base_win_short"], "be", round(be, 3), json.dumps(row["taus"], ensure_ascii=False, default=float)[:400], f"{time.time()-t0:.0f}s", flush=True)
+    Path(f"logs/hf_{sym[:3]}_{'_'.join(cfgs)}{'_shuf' if shuffle else ''}.json").write_text(json.dumps(res, indent=1, ensure_ascii=False, default=float))
 
 
 if __name__ == "__main__":
