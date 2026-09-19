@@ -56,7 +56,7 @@ def build(sym):
         v_ = fg.value.reindex(idx); ex["fng"] = v_; ex["fng_d7"] = v_.diff(7)
     fr = ld("fred")
     if fr is not None:
-        fr = fr.reindex(idx, method="ffill", limit=6)
+        fr = fr.sort_index().ffill(limit=8).reindex(idx, method="ffill", limit=8)   # 휴일·주간 시리즈 결측을 먼저 채운다
         ex["vix"] = fr.vix; ex["vix_d5"] = fr.vix.pct_change(5); ex["usd_d20"] = fr.usd_broad.pct_change(20); ex["y10_d20"] = fr.y10.diff(20)
         ex["nasdaq_r20"] = fr.nasdaq.pct_change(20); ex["nasdaq_a200"] = fr.nasdaq / fr.nasdaq.rolling(200).mean() - 1
         ex["spx_r20"] = fr.spx.pct_change(20)
@@ -65,7 +65,7 @@ def build(sym):
         if "gold" in fr: ex["gold_r20"] = fr.gold.pct_change(20)
     st = ld("stablecoins")
     if st is not None:
-        st = st.reindex(idx, method="ffill"); ex["stable_g30"] = st.stable_total.pct_change(30); ex["usdt_g30"] = st.usdt.pct_change(30)
+        st = st.sort_index().ffill(limit=8).reindex(idx, method="ffill", limit=8); ex["stable_g30"] = st.stable_total.pct_change(30); ex["usdt_g30"] = st.usdt.pct_change(30)
     cm = ld(f"cm_{sym[:3].lower()}")
     if cm is not None:
         cm = cm.reindex(idx)
