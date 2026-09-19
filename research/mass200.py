@@ -81,7 +81,10 @@ def build(F):
     """이론 계열별 신호 사전 반환: name -> (계열, 포지션 Series in [-1,1])"""
     S = {}
     c, r = F.c, F.r
-    add = lambda nm, fam, p: S.__setitem__(nm, (fam, p.clip(-1, 1).fillna(0)))
+    def add(nm, fam, p):
+        if not isinstance(p, pd.Series):
+            p = pd.Series(np.asarray(p, dtype=float).ravel(), index=F.index)
+        S[nm] = (fam, p.astype(float).clip(-1, 1).fillna(0))
 
     # ── A. 위험 프리미엄 (펀딩·베이시스·기간구조)
     for w in (8, 24, 72, 168):
