@@ -217,7 +217,7 @@ if __name__ == "__main__":
         S = build(F)
         ret = b.close.pct_change().shift(-1).fillna(0).values
         fund = core.funding_bars(sym, b.index, "1h")
-        tr = (b.index < TE).values; te = ~tr
+        tr = (b.index < TE); te = ~tr
         P("=" * 100 + f"\n### {sym} — 전략 {len(S)}종")
         rows = []
         pool = []
