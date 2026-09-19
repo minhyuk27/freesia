@@ -48,8 +48,7 @@ for sym in ("BTCUSDT", "ETHUSDT"):
     ok = lab != 0
     P("\n" + "=" * 90 + f"\n### {sym} 1분봉 {len(k):,}개  (±0.1% 배리어, 최대 120분)")
     P(f"  판정 가능 {ok.mean():.1%} | 기저율 위 {float((lab[ok]==1).mean()):.4f} | 도달 시간 중앙 {np.median(mins[ok]):.0f}분, 평균 {mins[ok].mean():.1f}분")
-    for q in (0.25, 0.5, 0.75, 0.9):
-        P(f"    도달 {int(q*100)}분위 {np.quantile(mins[ok], q):.0f}분", end="" if q < 0.9 else "\n")
+    P("    도달 분위: " + " | ".join(f"{int(q*100)}% {np.quantile(mins[ok], q):.0f}분" for q in (0.25, 0.5, 0.75, 0.9)))
     # ── 특징
     s = pd.Series
     lp = np.log(cl)
@@ -90,11 +89,11 @@ for sym in ("BTCUSDT", "ETHUSDT"):
     conf = np.abs(p_te - 0.5)
     for lo_, hi_ in ((0.0, 0.5), (0.5, 0.8), (0.8, 0.9), (0.9, 0.95), (0.95, 0.99), (0.99, 1.0)):
         a, b = np.quantile(conf, lo_), np.quantile(conf, hi_)
-        sel = (conf >= a) & (conf < b) if hi_ < 1.0 else (conf >= a)
-        if sel.sum() < 100:
+        msk = (conf >= a) if hi_ == 1.0 else ((conf >= a) & (conf < b))
+        if msk.sum() < 100:
             continue
-        acc = ((p_te[sel] > 0.5) == y[sel := np.where(te)[0][sel]] if False else ((p_te[(conf >= a) & (conf <= b if hi_ == 1.0 else conf < b)] > 0.5) == y[te][(conf >= a) & (conf <= b if hi_ == 1.0 else conf < b)]).mean())
-        n = int(((conf >= a) & (conf < b)).sum())
+        acc = float(((p_te[msk] > 0.5) == y[te][msk]).mean())
+        n = int(msk.sum())
         rows.append((f"{int(lo_*100)}~{int(hi_*100)}%", acc, n, acc - 0.70))
     P(pd.DataFrame(rows, columns=["확신분위", "정확도", "n", "손익분기(70%) 대비"]).round(4).to_string(index=False))
     # 최상위 확신 구간 세부
