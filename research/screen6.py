@@ -164,7 +164,7 @@ def g_breakout(x):
     for n in [24, 48, 96]:
         rng = ((h.rolling(n).max() - l.rolling(n).min()) / c)
         for q in [0.2, 0.35, 0.5]:
-            thr = rng.rolling(x.nb(24 * 365), min_periods=n * 4).quantile(q)
+            w_ = x.nb(24 * 365); thr = rng.rolling(w_, min_periods=min(n * 4, w_ - 1)).quantile(q)
             comp = (rng < thr).fillna(False)
             hh = h.shift(1).rolling(n).max().to_numpy()
             for H in [n, 2 * n]:
