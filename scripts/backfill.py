@@ -117,6 +117,8 @@ def main():
                 continue
             if st in ("ok", "skip"):
                 summary[st] += 1
+            # 어제자 Vision 파일은 게시 지연이 정상 → REST 갱신기(update_rest)가 채운다
+            miss = [d for d in (miss or []) if d != (today - timedelta(days=1)).isoformat()] or None
             if st == "empty" or miss:
                 summary["problems"].append({"task": [name, sym, ym], "status": st, "missing": miss})
             if i % 50 == 0:

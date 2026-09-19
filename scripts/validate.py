@@ -14,8 +14,9 @@ import pandas as pd
 ROOT = Path(__file__).resolve().parents[1]
 PQ = ROOT / "data" / "parquet"
 SYMS = ["BTCUSDT", "ETHUSDT"]
-MAX_STALE_MIN = {"klines_1m": 48 * 60, "mark_1m": 48 * 60, "premium_1m": 48 * 60,
-                 "funding": 24 * 60, "metrics_5m": 48 * 60}
+# 갱신기(update_rest)가 5분마다 도므로 1분봉·펀딩은 짧게, metrics 는 Vision 지연(~1일)만큼 허용
+MAX_STALE_MIN = {"klines_1m": 20, "mark_1m": 20, "premium_1m": 20,
+                 "funding": 9 * 60, "metrics_5m": 48 * 60}
 
 
 sys.path.insert(0, str(ROOT))
@@ -31,7 +32,7 @@ def gaps(ts: pd.Series, step: pd.Timedelta, limit=20):
 
 def main():
     now = datetime.now(timezone.utc)
-    rep, problems = {}, []
+    rep, problems, warnings = {}, [], []
     for sym in SYMS:
         for name in MAX_STALE_MIN:
             df = load(name, sym)
@@ -55,8 +56,10 @@ def main():
                 r.update(gap_runs=n, missing_bars=miss, gap_examples=ex[:5])
                 # 진짜 거래소 점검으로 인한 소량 결손은 허용하되 큰 것은 표시
                 big = [g for g in ex if g["missing"] >= 30]
-                if big:
+                if big and name == "klines_1m":  # 가격 본체의 결손은 치명적
                     problems.append(f"{key}: 30봉 이상 결손 {len(big)}건+ (예: {big[0]})")
+                elif big:  # 보조 데이터(마크·프리미엄·OI)는 거래소 측 영구 결손이 있어 경고만
+                    warnings.append(f"{key}: 결손 {miss}봉, 30봉 이상 구간 {len(big)}건+")
             if name == "klines_1m":
                 bad = int(((df.high < df[["open", "close"]].max(axis=1)) |
                            (df.low > df[["open", "close"]].min(axis=1)) |
@@ -76,10 +79,10 @@ def main():
         k, mk, pm = (load(n, sym) for n in ("klines_1m", "mark_1m", "premium_1m"))
         if k is not None and mk is not None and abs(len(k) - len(mk)) > 0.001 * len(k):
             problems.append(f"{sym}: 봉 수 불일치 klines={len(k)} mark={len(mk)}")
-    out = {"checked_at": now.isoformat(), "problems": problems, "datasets": rep}
+    out = {"checked_at": now.isoformat(), "problems": problems, "warnings": warnings, "datasets": rep}
     (ROOT / "logs").mkdir(exist_ok=True)
     (ROOT / "logs" / "validate_report.json").write_text(json.dumps(out, indent=1, ensure_ascii=False))
-    print(json.dumps({"problems": problems,
+    print(json.dumps({"problems": problems, "warnings": warnings,
                       "summary": {k: (r["rows"], r["last"], r.get("missing_bars")) for k, r in rep.items()}},
                      indent=1, ensure_ascii=False))
     sys.exit(1 if problems else 0)
