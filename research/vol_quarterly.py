@@ -35,6 +35,7 @@ for sym in ("BTCUSDT", "ETHUSDT"):
     q = m.ts.dt.tz_localize(None).dt.to_period("Q").astype(str).to_numpy()
     hourly = m.set_index("ts").close.resample("1h").last()
     daily = m.set_index("ts").resample("1D").agg({"high": "max", "low": "min", "close": "last"})
+    hourly.index, daily.index = hourly.index.tz_localize(None), daily.index.tz_localize(None)  # 분기 판정용
     lr1m = np.log(pd.Series(close)).diff()
     rows = []
     for qq in sorted(set(q)):
