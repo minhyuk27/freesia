@@ -18,11 +18,8 @@ MAX_STALE_MIN = {"klines_1m": 48 * 60, "mark_1m": 48 * 60, "premium_1m": 48 * 60
                  "funding": 24 * 60, "metrics_5m": 48 * 60}
 
 
-def load(name, sym):
-    files = sorted((PQ / name / sym).glob("*.parquet"))
-    if not files:
-        return None
-    return pd.concat([pd.read_parquet(f) for f in files]).sort_values("ts").reset_index(drop=True)
+sys.path.insert(0, str(ROOT))
+from freesia.store import load  # noqa: E402
 
 
 def gaps(ts: pd.Series, step: pd.Timedelta, limit=20):
