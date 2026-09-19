@@ -18,7 +18,9 @@ import screen2 as S2  # noqa: E402
 import screen6 as S6  # noqa: E402
 import combo as CB  # noqa: E402
 
-MIN_RET, MIN_SH = 0.05, 0.5                       # 연 유의미 기준: 순수익 ≥ 5%, Sharpe ≥ 0.5 (부분 연도는 기간 비례)
+import os
+MIN_RET = float(os.environ.get("STD_MIN_RET", "0.0"))   # v1.1: 순수익 > 0 (v1은 5%)
+MIN_SH = float(os.environ.get("STD_MIN_SH", "1.0"))     # v1.1: 연내 Sharpe ≥ 1.0 (v1은 0.5)
 TARGET = {"일": 0.50, "주": 0.55, "월": 0.65, "분기": 0.75, "연": 1.00, "거래": 0.50}
 RULE = {"일": "1D", "주": "W-SUN", "월": "MS", "분기": "QS", "연": "YS"}
 
@@ -55,14 +57,14 @@ def yearly(net, idx, ppy):
         ret = float(np.prod(1 + a) - 1)
         sh = float(a.mean() / a.std() * np.sqrt(ppy)) if a.std() > 0 else 0.0
         eq = np.cumprod(1 + a); mdd = float((eq / np.maximum.accumulate(eq) - 1).min())
-        ok = ret >= MIN_RET * frac and sh >= MIN_SH
+        ok = ret > MIN_RET * frac and sh >= MIN_SH
         rows.append((int(Y), ret, sh, mdd, ok, frac))
     return rows
 
 
 def scorecard(name, net, idx, ppy, pos=None, note=""):
     yr = yearly(net, idx, ppy)
-    lines = [f"### {name}{(' — ' + note) if note else ''}", "", "| 연도 | 순수익 | Sharpe | 연내 MDD | 유의미(≥5%·Sharpe≥0.5) | 월 승률 |", "|---|---|---|---|---|---|"]
+    lines = [f"### {name}{(' — ' + note) if note else ''}", "", "| 연도 | 순수익 | Sharpe | 연내 MDD | 유의미(수익>0·Sharpe≥1) | 월 승률 |", "|---|---|---|---|---|---|"]
     mo = compound(net, idx, "MS")
     for Y, ret, sh, mdd, ok, frac in yr:
         w = win(mo[mo.index.year == Y])[0]
