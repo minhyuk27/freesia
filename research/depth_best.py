@@ -44,7 +44,7 @@ def stat(A, N):
     if (eq <= 0.01).any():
         return None
     yrs = (A.index[-1] - A.index[0]).days / 365
-    te = (A.index >= TE).values
+    te = (A.index >= TE)
     eq2 = np.cumprod(1 + pnl[te]); yrs2 = (A.index[-1] - TE).days / 365
     if (eq2 <= 0.01).any():
         return None
