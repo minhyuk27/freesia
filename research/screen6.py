@@ -410,7 +410,8 @@ def events(p, tf):
 
 def main():
     tfs, tag = sys.argv[1].split(","), sys.argv[2]
-    groups = sys.argv[3].split(",") if len(sys.argv) > 3 else list(GROUPS)
+    groups = sys.argv[3].split(",") if len(sys.argv) > 3 and sys.argv[3] != "all" else list(GROUPS)
+    min_ev = float(sys.argv[4]) if len(sys.argv) > 4 else 0.0
     out, t0 = [], time.time()
     for g in groups:
         for tf in tfs:
@@ -421,6 +422,11 @@ def main():
                 try:
                     N, P = GROUPS[g](x)
                     ev = np.array([events(p, tf) for p in P])
+                    if min_ev > 0:
+                        keep = [i for i in range(len(P)) if ev[i] >= min_ev]
+                        if len(keep) < 3:
+                            continue
+                        N, P, ev = [N[i] for i in keep], [P[i] for i in keep], ev[keep]
                     r = S.evaluate(g, x, N, P, 2022, 1.5)
                     if r:
                         idx = {n_: i for i, n_ in enumerate(N)}
