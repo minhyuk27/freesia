@@ -5,6 +5,7 @@ import sys
 import warnings
 from pathlib import Path
 
+import numba
 import numpy as np
 import pandas as pd
 
@@ -23,24 +24,31 @@ def tstat(x):
     return float(x.mean() / x.std() * np.sqrt(len(x))) if len(x) > 2 and x.std() > 0 else 0.0
 
 
-def trades(prem, lp, w, k, H, exit_zero=True):
-    """겹치지 않는 거래만. 반환: (진입 인덱스, 부호, 수수료 전 bp)"""
-    z = ((prem - prem.rolling(w).mean()) / prem.rolling(w).std()).values
-    pv = prem.values; lv = lp.values
-    n = len(z); out_i = []; out_s = []; out_r = []
-    i = 0
+@numba.njit(cache=True)
+def _tr(z, lv, k, H):
+    n = len(z)
+    oi = np.empty(n, np.int64); os_ = np.empty(n, np.int8); orr = np.empty(n, np.float64)
+    c = 0; i = 0
     while i < n - 1:
         if np.isnan(z[i]) or abs(z[i]) < k:
             i += 1; continue
         s = -1 if z[i] > 0 else 1
-        j = min(i + H, n - 1)
-        if exit_zero:
-            for t in range(i + 1, min(i + H, n - 1) + 1):
-                if (s == -1 and z[t] <= 0) or (s == 1 and z[t] >= 0):
-                    j = t; break
-        out_i.append(i); out_s.append(s); out_r.append(s * (lv[j] - lv[i]) * 1e4)
-        i = j + 1
-    return np.array(out_i), np.array(out_s), np.array(out_r)
+        lim = i + H if i + H < n - 1 else n - 1
+        j = lim
+        for t in range(i + 1, lim + 1):
+            if (s == -1 and z[t] <= 0) or (s == 1 and z[t] >= 0):
+                j = t; break
+        oi[c] = i; os_[c] = s; orr[c] = s * (lv[j] - lv[i]) * 1e4
+        c += 1; i = j + 1
+    return oi[:c], os_[:c], orr[:c]
+
+
+def zscore(prem, w):
+    return ((prem - prem.rolling(w).mean()) / prem.rolling(w).std()).values
+
+
+def trades(prem, lp, w, k, H, exit_zero=True):
+    return _tr(zscore(prem, w), lp.values, k, H)
 
 
 for sym in ("BTCUSDT", "ETHUSDT"):
@@ -92,11 +100,12 @@ for sym in ("BTCUSDT", "ETHUSDT"):
     # 위약: 프리미엄 시계열 위상 회전
     te_mask = ts >= TE
     real = r_[te_mask].mean()
+    zbase = zscore(df.prem, w)
     pl = []
     for _ in range(300):
         sh = rng.integers(10000, len(df) - 10000)
-        pp = pd.Series(np.roll(df.prem.values, sh), index=df.index)
-        ii, ss, rr = trades(pp, lp, w, k, H)
+        zp = np.roll(zbase, sh)
+        ii, ss, rr = _tr(zp, lp.values, k, H)
         if len(ii) < 50:
             continue
         tt = df.index[ii] >= TE
