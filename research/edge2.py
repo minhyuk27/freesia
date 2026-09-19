@@ -59,7 +59,10 @@ def build(sym):
         fr = fr.reindex(idx, method="ffill", limit=6)
         ex["vix"] = fr.vix; ex["vix_d5"] = fr.vix.pct_change(5); ex["usd_d20"] = fr.usd_broad.pct_change(20); ex["y10_d20"] = fr.y10.diff(20)
         ex["nasdaq_r20"] = fr.nasdaq.pct_change(20); ex["nasdaq_a200"] = fr.nasdaq / fr.nasdaq.rolling(200).mean() - 1
-        ex["spx_r20"] = fr.spx.pct_change(20); ex["hy"] = fr.hy_spread; ex["fed_d28"] = fr.fed_assets.pct_change(28); ex["gold_r20"] = fr.gold.pct_change(20)
+        ex["spx_r20"] = fr.spx.pct_change(20)
+        if "hy_spread" in fr: ex["hy"] = fr.hy_spread
+        ex["fed_d28"] = fr.fed_assets.pct_change(28)
+        if "gold" in fr: ex["gold_r20"] = fr.gold.pct_change(20)
     st = ld("stablecoins")
     if st is not None:
         st = st.reindex(idx, method="ffill"); ex["stable_g30"] = st.stable_total.pct_change(30); ex["usdt_g30"] = st.usdt.pct_change(30)
@@ -73,6 +76,14 @@ def build(sym):
         if "NVTAdj" in cm: ex["nvt"] = cm.NVTAdj
         if "FeeTotUSD" in cm: ex["fee_g30"] = cm.FeeTotUSD.pct_change(30)
         if "HashRate" in cm: ex["hash_g30"] = cm.HashRate.pct_change(30)
+        if "FlowInExUSD" in cm and "FlowOutExUSD" in cm:
+            net = (cm.FlowInExUSD - cm.FlowOutExUSD)
+            ex["ex_net7"] = net.rolling(7).sum() / cm.CapMrktCurUSD; ex["ex_net30"] = net.rolling(30).sum() / cm.CapMrktCurUSD
+            ex["ex_in_z"] = (cm.FlowInExUSD.rolling(7).mean() / cm.CapMrktCurUSD)
+        if "SplyExUSD" in cm and "CapMrktCurUSD" in cm:
+            ex["ex_sply_share"] = cm.SplyExUSD / cm.CapMrktCurUSD; ex["ex_sply_d30"] = (cm.SplyExUSD / cm.CapMrktCurUSD).diff(30)
+        if "IssTotUSD" in cm: ex["iss_ratio"] = cm.IssTotUSD.rolling(30).sum() / cm.CapMrktCurUSD
+        if "ROI30d" in cm: ex["roi30"] = cm.ROI30d
     cb = ld(f"cb_{sym[:3].lower()}_1d")
     if cb is not None:
         spot = core.bars(sym, "1d").close  # 선물 종가 대신 현물이 이상적이나 여기선 선물 종가 사용(근사)
