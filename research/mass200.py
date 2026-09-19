@@ -159,8 +159,8 @@ def build(F):
         add(f"E 이격{w}", "E추세", ((c / c.rolling(w).mean() - 1) * 20).clip(-1, 1))
     add("E 다속도 앙상블", "E추세", pd.concat([np.sign(c / c.shift(w) - 1) for w in (24, 72, 168, 336, 720)], axis=1).mean(axis=1))
     for n_ in (10, 20, 30):
-        add(f"E ADX{n_} 추세", "E추세", np.sign(c - c.rolling(n_ * 4).mean()) * (ind.adx(F.h, F.l, c, n_) > 25).astype(float))
-    add("E 수퍼트렌드", "E추세", pd.Series(ind.supertrend(F.h, F.l, c, 10, 3.0), index=F.index))
+        add(f"E ADX{n_} 추세", "E추세", np.sign(c - c.rolling(n_ * 4).mean()) * (ind.adx(F.h, F.l, c, n_)[2] > 25).astype(float))
+    add("E 수퍼트렌드", "E추세", pd.Series(np.asarray(ind.supertrend(F.h, F.l, c, 10, 3.0)).ravel(), index=F.index))
     # ── F. 평균회귀
     for w in (6, 24, 72, 168, 336):
         add(f"F 반전{w}", "F평균회귀", -np.sign(c / c.shift(w) - 1))
@@ -170,7 +170,7 @@ def build(F):
         add(f"F RSI{n_} 역", "F평균회귀", -((rs - 50) / 30).clip(-1, 1))
         add(f"F RSI{n_} 극단", "F평균회귀", np.where(rs < 30, 1.0, np.where(rs > 70, -1.0, 0.0)))
     for n_, k_ in ((20, 2), (50, 2), (20, 3)):
-        m_, u_, l_ = ind.bbands(c, n_, k_)
+        m_, u_, l_ = ind.bbands(c, n_, k_)[0], ind.bbands(c, n_, k_)[1], ind.bbands(c, n_, k_)[2]
         add(f"F 볼린저{n_}/{k_} 역", "F평균회귀", np.where(c < l_, 1.0, np.where(c > u_, -1.0, 0.0)))
     # ── G. 상대가치
     add("G 프리미엄 회귀", "G상대가치", -z(F.prem, 240).clip(-2, 2) / 2)
