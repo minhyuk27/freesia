@@ -29,16 +29,17 @@ def techniques(b):
     n = len(c)
 
     # 1. 다우 시장구조: 스윙 고점·저점이 동반 상승/하락
-    sh, sl = ind.swings(h, l, 5)
-    hi = h.where(sh).ffill(); lo = l.where(sl).ffill()
-    hi1, lo1 = hi.shift(1), lo.shift(1)
-    T["구조"] = np.sign((hi > hi1).astype(int) + (lo > lo1).astype(int) - 1).where((hi > hi1) == (lo > lo1), 0).fillna(0)
+    shv, shi_, slv, sli, ish, isl = ind.swings(h, l, 5)
+    hi = pd.Series(shv, index=c.index); lo = pd.Series(slv, index=c.index)
+    up_h = hi > hi.shift(1); up_l = lo > lo.shift(1)
+    T["구조"] = pd.Series(np.where(up_h & up_l, 1, np.where(~up_h & ~up_l, -1, 0)), index=c.index)
 
     # 2. 돈치안 채널 돌파
     T["돌파"] = pd.Series(np.where(c > h.rolling(20).max().shift(1), 1, np.where(c < l.rolling(20).min().shift(1), -1, 0)), index=c.index)
 
     # 3. 이치모쿠 구름 + 전환/기준선
     t9, k26, sa, sb = ind.ichimoku(h, l, c, 9, 26, 52)
+    sa = sa.reindex(c.index); sb = sb.reindex(c.index)
     above = (c > sa) & (c > sb) & (t9 > k26)
     below = (c < sa) & (c < sb) & (t9 < k26)
     T["이치모쿠"] = pd.Series(np.where(above, 1, np.where(below, -1, 0)), index=c.index)
@@ -53,7 +54,7 @@ def techniques(b):
     T["볼륨프로파일"] = pd.Series(np.sign(c.values - poc), index=c.index).fillna(0)
 
     # 5. 앵커드 VWAP (최근 스윙 극단에 고정)
-    anchor = np.where(sh.values | sl.values)[0]
+    anchor = np.where(ish | isl)[0]
     av = np.full(n, np.nan); a = 0; cum_pv = 0.0; cum_v = 0.0
     aset = set(anchor.tolist())
     for i in range(n):
@@ -65,7 +66,7 @@ def techniques(b):
     T["앵커드VWAP"] = pd.Series(np.sign(c.values - av), index=c.index).fillna(0)
 
     # 6. 피보나치 되돌림: 추세 방향으로 38.2~61.8% 되돌림 구간이면 추세 방향
-    sw_h = h.where(sh).ffill(); sw_l = l.where(sl).ffill()
+    sw_h = hi; sw_l = lo
     rngv = (sw_h - sw_l)
     retr = (sw_h - c) / rngv.replace(0, np.nan)
     up = (sw_h.diff() > 0) | (sw_l.diff() > 0)
@@ -94,14 +95,15 @@ def techniques(b):
     T["FVG"] = pd.Series(np.where(gap_up.rolling(10).max() > 0, 1, np.where(gap_dn.rolling(10).max() > 0, -1, 0)), index=c.index)
 
     # 11. 변동성 수축 후 확장 (볼린저가 켈트너 안 → 이탈 방향)
-    bu, bm, bl = ind.bbands(c, 20, 2.0)
-    ku, km, kl = ind.keltner(h, l, c, 20, 1.5)
+    bm, bu, bl = ind.bbands(c, 20, 2.0)
+    km, ku, kl = ind.keltner(h, l, c, 20, 1.5)
     sq = (bu < ku) & (bl > kl)
     fired = sq.shift(1) & ~sq
     T["수축확장"] = pd.Series(np.where(fired & (c > bm), 1, np.where(fired & (c < bm), -1, 0)), index=c.index)
 
     # 12. 하이킨아시 추세
-    ho, hh, hl, hc = ind.heikin_ashi(o, h, l, c)
+    ho_, hc_ = ind.heikin_ashi(o, h, l, c)
+    ho = pd.Series(ho_, index=c.index); hc = pd.Series(hc_, index=c.index)
     T["하이킨아시"] = pd.Series(np.where((hc > ho) & (hc.shift(1) > ho.shift(1)), 1, np.where((hc < ho) & (hc.shift(1) < ho.shift(1)), -1, 0)), index=c.index)
 
     # 13. 회귀 채널 (60봉 선형회귀 ±2σ)
@@ -119,8 +121,7 @@ def techniques(b):
     T["이중바닥천정"] = pd.Series(np.where(db, 1, np.where(dt, -1, 0)), index=c.index)
 
     # 15. 수퍼트렌드 (ATR 브릭 대용)
-    st, dirn = ind.supertrend(h, l, c, 10, 3.0)
-    T["수퍼트렌드"] = pd.Series(dirn, index=c.index).fillna(0)
+    T["수퍼트렌드"] = pd.Series(ind.supertrend(h, l, c, 10, 3.0), index=c.index).fillna(0)
 
     M = np.zeros((len(T), n), np.int8)
     for i, k in enumerate(T):
