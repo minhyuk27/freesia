@@ -49,6 +49,10 @@ def days_of(y, m, last_day):
 def save(name, sym, ym, df, partial):
     d = PQ / name / sym
     d.mkdir(parents=True, exist_ok=True)
+    y, m = int(ym[:4]), int(ym[5:])
+    lo = pd.Timestamp(y, m, 1, tz="UTC")
+    hi = pd.Timestamp(y + (m == 12), m % 12 + 1, 1, tz="UTC")
+    df = df[(df.ts >= lo) & (df.ts < hi)]
     df = df.drop_duplicates("ts").sort_values("ts").reset_index(drop=True)
     tmp = d / f".{ym}.tmp"
     df.to_parquet(tmp, index=False)
@@ -66,7 +70,8 @@ def funding_rest(sym, y, m, last_day):
     rows, t = [], int(start.timestamp() * 1000)
     while t < int(end.timestamp() * 1000):
         r = requests.get("https://fapi.binance.com/fapi/v1/fundingRate",
-                         params={"symbol": sym, "startTime": t, "limit": 1000}, timeout=30)
+                         params={"symbol": sym, "startTime": t, "limit": 1000,
+                                 "endTime": int(end.timestamp() * 1000) - 1}, timeout=30)
         r.raise_for_status()
         js = r.json()
         if not js:
@@ -76,7 +81,7 @@ def funding_rest(sym, y, m, last_day):
     if not rows:
         return None
     df = pd.DataFrame(rows)
-    return pd.DataFrame({"ts": pd.to_datetime(df["fundingTime"], unit="ms", utc=True),
+    return pd.DataFrame({"ts": pd.to_datetime(df["fundingTime"], unit="ms", utc=True).dt.floor("s"),
                          "interval_hours": 8, "rate": df["fundingRate"].astype("float64")})
 
 
@@ -107,7 +112,7 @@ def do_task(name, sym, y, m, today):
         df = funding_rest(sym, y, m, last_day)
         if df is None:
             return name, sym, ym, "empty", 0, ["no funding rows"]
-        return name, sym, ym, "ok", save(name, sym, ym, df, True), None
+        return name, sym, ym, "ok", save(name, sym, ym, df, cur), None
     frames, miss = [], []
     for day in days_of(y, m, last_day):
         b = v.fetch_zip(v.url_daily(kind, sym, day.isoformat()))

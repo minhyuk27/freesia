@@ -85,7 +85,7 @@ def parse_funding(zbytes: bytes) -> pd.DataFrame:
         raw = z.read(z.namelist()[0])
     df = pd.read_csv(io.BytesIO(raw))
     df.columns = [c.strip() for c in df.columns]
-    out = pd.DataFrame({"ts": _ms(df["calc_time"])})
+    out = pd.DataFrame({"ts": _ms(df["calc_time"]).dt.floor("s")})
     out["interval_hours"] = df["funding_interval_hours"].astype("int64") \
         if "funding_interval_hours" in df else 8
     out["rate"] = df["last_funding_rate"].astype("float64")
