@@ -119,6 +119,16 @@ def sim(times, side_out, out, ex, ret, tp, sl, ii, lev=100, frac=0.30):
     return trades, cap, mdd, liq
 
 
+def clean(o):
+    if isinstance(o, dict):
+        return {str(k): clean(v) for k, v in o.items()}
+    if isinstance(o, (list, tuple)):
+        return [clean(v) for v in o]
+    if isinstance(o, (np.floating, np.integer)):
+        return o.item()
+    return o
+
+
 def main():
     sym, cfgs = sys.argv[1], sys.argv[2].split(",")
     shuffle = len(sys.argv) > 3 and sys.argv[3] == "shuffle"
@@ -180,8 +190,8 @@ def main():
                 mk = (pp >= a) & (pp <= b); cal.append((round(float(a), 3), round(float(b), 3), round(float(act[mk].mean()), 3), int(mk.sum())))
             row["보정(예측확률 구간→실제 승률, n)"] = cal
             res[cname]["years"][Y] = row
-            print(sym, cname, Y, "base", row["base_win_long"], row["base_win_short"], "be", round(be, 3), json.dumps(row["taus"], ensure_ascii=False, default=float)[:400], f"{time.time()-t0:.0f}s", flush=True)
-    Path(f"logs/hf_{sym[:3]}_{'_'.join(cfgs)}{'_shuf' if shuffle else ''}.json").write_text(json.dumps(res, indent=1, ensure_ascii=False, default=float))
+            print(sym, cname, Y, "base", row["base_win_long"], row["base_win_short"], "be", round(be, 3), json.dumps(clean(row["taus"]), ensure_ascii=False)[:400], f"{time.time()-t0:.0f}s", flush=True)
+    Path(f"logs/hf_{sym[:3]}_{'_'.join(cfgs)}{'_shuf' if shuffle else ''}.json").write_text(json.dumps(clean(res), indent=1, ensure_ascii=False))
 
 
 if __name__ == "__main__":
