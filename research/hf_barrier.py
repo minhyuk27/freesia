@@ -21,7 +21,9 @@ STEP = 5                       # 결정 간격(분)
 SLIP = 0.0001
 FEE = 0.0005
 LIQ = 0.006                    # 100배 격리 청산 거리 (mmr 0.4% 가정)
-CONFIGS = {"A": (0.005, 0.005, 120), "B": (0.005, 0.010, 240), "C": (0.003, 0.003, 60), "D": (0.010, 0.010, 480)}
+CONFIGS = {"A": (0.005, 0.005, 120), "B": (0.005, 0.010, 240), "C": (0.003, 0.003, 60), "D": (0.010, 0.010, 480),
+           "E": (0.010, 0.005, 480), "F": (0.015, 0.0075, 720), "G": (0.020, 0.010, 1440)}
+LEV = {"A": 100, "B": 50, "C": 100, "D": 50, "E": 100, "F": 50, "G": 50}   # 청산 거리(1/배율-0.4%)가 손절 폭보다 멀도록
 
 
 def load(sym, other):
@@ -100,23 +102,22 @@ def barrier(high, low, close, ii, tp, sl, H, side):
 
 
 def sim(times, side_out, out, ex, ret, tp, sl, ii, lev=100, frac=0.30):
-    """한 번에 하나만 보유. 자본 대비 레버리지 시뮬. 반환: 거래 목록, 최종 자본배수, 최대낙폭, 청산 횟수"""
-    cap = 1.0; peak = 1.0; mdd = 0.0; trades = []; liq = 0; next_free = -1
+    """한 번에 하나만 보유. 자본 대비 레버리지 시뮬. 청산 거리 = 1/배율 - 유지증거금 0.4%(미검증)."""
+    liq = 1.0 / lev - 0.004
+    cap = 1.0; peak = 1.0; mdd = 0.0; trades = []; nliq = 0; next_free = -1
     for t in np.argsort(ii):
         if not side_out[t] or ii[t] <= next_free:
             continue
         r = ret[t] - 2 * FEE - 2 * SLIP                           # 순 가격수익
-        notional = cap * frac * lev
-        if -ret[t] >= LIQ and out[t] == -1 or (r < -LIQ):         # 손절이 청산 거리보다 깊거나 실제 손실이 청산 거리 초과
-            pnl = -frac                                            # 증거금 전액 손실
-            liq += 1
+        if ret[t] <= -liq:                                         # 청산 거리 도달 → 증거금 전액 손실
+            pnl = -frac; nliq += 1
         else:
             pnl = frac * lev * r
         cap *= (1 + pnl); peak = max(peak, cap); mdd = min(mdd, cap / peak - 1)
         trades.append((times[t], out[t], r, pnl))
         next_free = ii[t] + ex[t]
         if cap <= 0.02: break
-    return trades, cap, mdd, liq
+    return trades, cap, mdd, nliq
 
 
 def clean(o):
@@ -176,12 +177,12 @@ def main():
                 exs = np.where(sig[pick] == 1, lab[1][1][te][pick], lab[-1][1][te][pick])
                 rets = np.where(sig[pick] == 1, lab[1][2][te][pick], lab[-1][2][te][pick])
                 iis = idx_all[te][pick]
-                tr_list, cap, mdd, liq = sim(ts[te][pick], np.ones(len(pick), bool), outs, exs, rets, tp, sl, iis)
+                tr_list, cap, mdd, liq = sim(ts[te][pick], np.ones(len(pick), bool), outs, exs, rets, tp, sl, iis, lev=LEV[cname])
                 n = len(tr_list); wins = sum(1 for t in tr_list if t[1] == 1)
                 gross_ret = np.mean([t[2] for t in tr_list]) if n else 0
                 row["taus"][round(tau, 3)] = {"신호수": int(len(pick)), "거래수": n, "주당거래": round(n / (len(te) * STEP / 60 / 24 / 7), 1),
                                               "승률(목표)": round(wins / n, 3) if n else None, "평균 순가격수익%": round(100 * gross_ret, 3),
-                                              "100배·30% 최종배수": round(cap, 3), "MDD": round(mdd, 3), "청산": liq}
+                                              "레버리지·30% 최종배수": round(cap, 3), "MDD": round(mdd, 3), "청산": liq}
             # 보정: 예측확률 구간별 실제 승률
             pp = np.where(P[1] >= P[-1], P[1], P[-1]); ss = np.where(P[1] >= P[-1], 1, -1)
             act = np.where(ss == 1, lab[1][0][te] == 1, lab[-1][0][te] == 1)
