@@ -1,4 +1,4 @@
-"""주 2회 이상 거래(포지션 변경 이벤트 연 104회 이상) 조건 스크리닝. BTC·ETH만.
+"""주 2회 이상 거래(자본 25% 이상 포지션 변경 연 104회 이상) 조건 스크리닝. BTC·ETH만.
 사용: python research/screen5.py <tf,...> <tag> [min_events_per_year]"""
 import json
 import sys
@@ -20,7 +20,7 @@ FAM.update({"volbreak": S3.f_volbreak, "volregime": S3.f_volregime, "nearhigh": 
 
 def events_per_year(p, tf):
     d = np.abs(np.diff(np.nan_to_num(np.asarray(p, float)), prepend=0.0))
-    return float((d > 1e-6).sum() / (len(p) / S.core.PPY[tf]))
+    return float((d >= 0.25).sum() / (len(p) / S.core.PPY[tf]))
 
 
 def main():
