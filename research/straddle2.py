@@ -54,12 +54,12 @@ for sym in ("BTCUSDT", "ETHUSDT"):
     bm, bu, bl = ind.bbands(c5, 20, 2.0); km, ku, kl = ind.keltner(h5, l5, c5, 20, 1.5)
     sq = ((bu < ku) & (bl > kl)); fired = (sq.shift(1) & ~sq).reindex(idx, method="ffill").fillna(False).values
     tz = pd.Series(n_).rolling(60).mean() / pd.Series(n_).rolling(1440).mean()
-    trig = {"무조건": np.ones(len(k), bool), "저변동 하위20%": (q < 0.2).values, "고변동 상위20%": (q > 0.8).values,
-            "스퀴즈 해제": fired, "체결급증>2": (tz > 2).values,
-            "미국장 13~16": ((idx.hour >= 13) & (idx.hour < 16))}
+    trig = {"무조건": np.ones(len(k), bool), "저변동 하위20%": (q < 0.2).values, "저변동 하위5%": (q < 0.05).values,
+            "고변동 상위20%": (q > 0.8).values, "스퀴즈 해제": fired, "체결급증>2": (tz > 2).values,
+            "저변동+스퀴즈": (q < 0.2).values & fired}
     P("=" * 84 + f"\n### {sym}  '계속 갈 확률' p — 손익분기 p* 와 비교")
     P(f"{'트리거':18s} {'배율':>4} {'d%':>6} {'계속':>7} {'되돌림':>7} {'p':>7} {'p*':>7} {'기대%':>8}")
-    for L, H in ((100, 240), (50, 720), (25, 1440)):
+    for L, H in ((100, 240), (50, 720), (25, 1440), (15, 4320), (10, 10080), (6, 20160)):
         d = 1.0 / L - 0.004
         fee = 3.0 * L * 0.0005          # 진입2 + 청산1 다리 수수료(증거금 배수)
         # 이기면 살아남은 다리 +2Ld-1-fee, 지면 -1-1-fee (양쪽 다 죽음)
