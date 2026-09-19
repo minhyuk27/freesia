@@ -39,7 +39,7 @@ def h1():
     lr = np.log(df.e / df.b)
     rb = np.log(df.b).diff().shift(-1).fillna(0).values
     re_ = np.log(df.e).diff().shift(-1).fillna(0).values
-    tr = (df.index < TE).values; te = ~tr
+    tr = (df.index < TE); te = ~tr
     rows = []; n = 0
     for w in (24, 72, 168, 336, 720):
         z = ((lr - lr.rolling(w).mean()) / lr.rolling(w).std()).values
@@ -87,7 +87,7 @@ def h2():
         ens = pd.concat(fcs, axis=1).mean(axis=1)
         pos = (ens.clip(-2, 2) * (0.60 / rv)).clip(-2, 2).fillna(0)
         ret = c.pct_change().shift(-1).fillna(0).values
-        tr = (b.index < TE).values; te = ~tr
+        tr = (b.index < TE); te = ~tr
         p = pos.values; pp = np.concatenate([[0.0], p[:-1]])
         net = pp * ret - np.abs(np.diff(pp, prepend=0.0)) * COST - pp * fund
         bh = ret.copy()
@@ -132,7 +132,7 @@ def h5():
         ret = df.c.pct_change().shift(-1).fillna(0).values
         l = np.log(df.c)
         trend = np.sign(l - l.rolling(24 * 14).mean()).fillna(0)
-        tr = (df.index < TE).values; te = ~tr
+        tr = (df.index < TE); te = ~tr
         P(f"\n  {sym}")
         for nm, pos in (("추세만", trend),
                         ("추세×IV역비례", trend * (df.iv.median() / df.iv).clip(0.3, 2.0)),
