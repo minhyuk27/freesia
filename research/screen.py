@@ -48,6 +48,9 @@ class Ctx:
         self.fund = core.funding_bars(sym, self.idx, tf)
         self.ppy = core.PPY[tf]
 
+    def run(self, pos):
+        return core.run(pos, self.C.to_numpy(), self.fund)
+
     def nb(self, hours):
         return max(1, int(round(hours / self.hb)))
 
@@ -235,7 +238,7 @@ def evaluate(name, x: Ctx, N, P, first_year, min_train):
     R = np.zeros((T, len(P)))
     tv = np.zeros(len(P))
     for j, p in enumerate(P):
-        R[:, j] = core.run(np.asarray(p, float), x.C.to_numpy(), x.fund)
+        R[:, j] = x.run(np.asarray(p, float))
         tv[j] = core.turnover_stats(np.asarray(p, float), x.tf)
     ppy = x.ppy
     oos, used, picks = core.walk_forward(R, x.idx, x.tf, first_year, min_train)
