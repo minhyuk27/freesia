@@ -62,6 +62,16 @@ def windows(lp, W):
     return (X - m) / np.where(s == 0, np.nan, s)
 
 
+def report_te(name, sig, rl, rs, hold, idx):
+    ev = (sig != 0) & (idx >= TE); sel = pick(ev, hold)
+    if sel.sum() < 15:
+        P(f"  {name:28s} 표본 부족"); return None
+    r = np.where(sig[sel] == 1, rl[sel], rs[sel])
+    wk = sel.sum() / max((idx[idx >= TE][-1] - TE).days / 7, 1)
+    P(f"  {name:28s} 테스트 {r.mean()*1e4:7.1f}bp t{tstat(r):5.2f} n{int(sel.sum()):6d} 주당{wk:5.1f} | 테이커순 {r.mean()*1e4-12:6.1f} 메이커순 {r.mean()*1e4-4:6.1f}")
+    return r.mean() * 1e4
+
+
 def report(name, sig, rl, rs, hold, idx, extra=""):
     rows = []
     for nm, m in (("학습", idx < TE), ("테스트", idx >= TE)):
@@ -149,7 +159,15 @@ for sym in ("BTCUSDT", "ETHUSDT"):
                 pred[test_i[s0:s0 + step]] = rl[train_i][topk].mean(1)
             thr = np.percentile(np.abs(pred[test_i]), 80)
             sig = np.where(pred > thr, 1, np.where(pred < -thr, -1, 0)).astype(np.int8)
-            report(f"W{W} M{M} 상위20%확신", sig, rl, rs, hold, idx)
+            real = report_te(f"W{W} M{M} 상위20%확신", sig, rl, rs, hold, idx)
+            pls = []
+            for _ in range(40):
+                sg = np.roll(sig, rng.integers(500, len(b) - 500))
+                ev = (sg != 0) & (idx >= TE); sel = pick(ev, hold)
+                if sel.sum() > 15:
+                    pls.append(np.where(sg[sel] == 1, rl[sel], rs[sel]).mean() * 1e4)
+            if pls and real is not None:
+                P(f"       위약40회: 평균 {np.mean(pls):5.1f} 95% {np.percentile(pls,95):5.1f} 최대 {np.max(pls):5.1f} | 실제 {real:5.1f}")
     TRIES["C"] = nc
 
     # ── D. 캔들 시퀀스 기호화
@@ -163,7 +181,7 @@ for sym in ("BTCUSDT", "ETHUSDT"):
                                       4 + (bq > .5).astype(int) + (bq > .85).astype(int))))
     nd = 0
     for L in (3, 4):
-        key = np.zeros(len(b), np.int64) - 1
+        key = np.zeros(len(b), np.int64)
         valid = np.ones(len(b), bool)
         for j in range(L):
             s = np.roll(sym_, j)
@@ -177,6 +195,15 @@ for sym in ("BTCUSDT", "ETHUSDT"):
         longs = set(g[g["mean"] > 0.002].index); shorts = set(g[g["mean"] < -0.002].index)
         sig = np.where(np.isin(key, list(longs)), 1, np.where(np.isin(key, list(shorts)), -1, 0)).astype(np.int8)
         report(f"{L}봉 시퀀스 (후보 {len(g)}개 → 롱{len(longs)}/숏{len(shorts)})", sig, rl, rs, hold, idx)
+        pls = []
+        for _ in range(60):
+            sg = np.roll(sig, rng.integers(500, len(b) - 500))
+            ev = (sg != 0) & (idx >= TE); sel = pick(ev, hold)
+            if sel.sum() > 15:
+                pls.append(np.where(sg[sel] == 1, rl[sel], rs[sel]).mean() * 1e4)
+        ev = (sig != 0) & (idx >= TE); sel = pick(ev, hold)
+        if pls and sel.sum() > 15:
+            P(f"       위약60회: 평균 {np.mean(pls):5.1f} 95% {np.percentile(pls,95):5.1f} 최대 {np.max(pls):5.1f} | 실제 {np.where(sig[sel]==1, rl[sel], rs[sel]).mean()*1e4:5.1f}")
         if len(g):
             best = g.sort_values("mean", ascending=False)
             P(f"       학습 최고 시퀀스 {best['mean'].iloc[0]*1e4:.0f}bp(n={int(best['count'].iloc[0])}) / 최저 {best['mean'].iloc[-1]*1e4:.0f}bp(n={int(best['count'].iloc[-1])})")
