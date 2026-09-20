@@ -35,11 +35,13 @@ def fetch_day(sym, day):
         df = pd.read_csv(io.BytesIO(z.read(z.namelist()[0])))
     df["ts"] = pd.to_datetime(df.timestamp, utc=True)
     # 넓은 형식으로: 각 시점별 ±1~5% 잔량
-    w = df.pivot_table(index="ts", columns="percentage", values="notional", aggfunc="last")
+    df = df.drop_duplicates(subset=["ts", "percentage"], keep="last")
+    w = df.pivot(index="ts", columns="percentage", values="notional")
     w.columns = [f"n{int(c):+d}" for c in w.columns]
-    d2 = df.pivot_table(index="ts", columns="percentage", values="depth", aggfunc="last")
+    d2 = df.pivot(index="ts", columns="percentage", values="depth")
     d2.columns = [f"d{int(c):+d}" for c in d2.columns]
     out = pd.concat([w, d2], axis=1).reset_index()
+    out = out.loc[:, ~out.columns.duplicated()]
     return out
 
 
