@@ -23,12 +23,23 @@ for s in SYM:
     P(f"{s}: {len(ix):,}행")
 
 
-def exp_thresh(v, q, warm=200000, step=1440):
-    """확장창 분위수를 하루 단위로 갱신(계산량 절약). 직전까지의 정보만 사용."""
+_TH = {}
+def exp_thresh(v, q, key=None, warm=200000, step=10080):
+    """확장창 분위수를 주 단위로 갱신. 직전까지의 정보만 사용. 정렬 한 번으로 O(n log n)."""
+    ck = (key, q, warm, step)
+    if ck in _TH: return _TH[ck]
     n = len(v); th = np.full(n, np.nan)
-    vs = pd.Series(v)
+    import bisect
+    srt = []
+    prev = 0
     for i in range(warm, n, step):
-        th[i:i+step] = np.nanquantile(v[:i], q)
+        seg = v[prev:i]; seg = seg[np.isfinite(seg)]
+        for x in seg: bisect.insort(srt, float(x))
+        prev = i
+        if srt:
+            pos = int(q*(len(srt)-1))
+            th[i:i+step] = srt[pos]
+    _TH[ck] = th
     return th
 
 
@@ -65,7 +76,7 @@ def build(q, hold, cool, fee=10.0, tp=0.0, wgt=1.0):
     E = []
     for s in SYM:
         d = D[s]
-        th = exp_thresh(d["prem"], q)
+        th = exp_thresh(d["prem"], q, key=s)
         a_, b_, r_, m_ = run(d["o"], d["h"], d["l"], d["c"], d["prem"], th, hold, cool, fee, tp)
         for a, bb, r, m in zip(a_, b_, r_, m_):
             E.append((int(a), int(bb), float(r), float(m), d["idx"][int(a)], (s, q, hold), 0.01, wgt))
@@ -139,7 +150,7 @@ for q in (0.999, 0.995, 0.99):
     acc = []
     for s in SYM:
         d = D[s]
-        th = exp_thresh(-d["prem"], 1-q)
+        th = exp_thresh(-d["prem"], 1-q, key="n"+s)
         a_, b_, r_, m_ = run(d["o"], d["h"], d["l"], d["c"], -d["prem"], th, bh, bc, 10.0, 0.0)
         acc.append(-r_ - 20.0/1e4 + 10.0/1e4)   # 숏 수익 = -롱수익, 비용 재적용
     rr = np.concatenate(acc)
