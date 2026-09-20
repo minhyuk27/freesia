@@ -40,7 +40,8 @@ for s in SYM:
         P(f"{s}: 호가 데이터 없음"); continue
     bd = bd.sort_values("ts").reset_index(drop=True)
     # 분 단위로 정렬 (각 분의 마지막 스냅샷)
-    bd["m"] = bd.ts.dt.floor("min")
+    ts = pd.to_datetime(bd.ts, utc=True)
+    bd["m"] = ts.dt.floor("min")
     bd = bd.groupby("m").last().reset_index()
     pos = k.index.searchsorted(bd.m.values)
     ok = (pos > 0) & (pos < len(k))
