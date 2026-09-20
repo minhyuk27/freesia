@@ -88,50 +88,51 @@ def rep(E, lab, full=False, quiet_small=True):
     return best
 
 
-P("\n" + "="*140)
-P("[1] 초단기 깊이 프리미엄 — 봉 길이 × 깊이배수 (같은 봉 종가 청산)")
-P("="*140)
-res = []
-for B in (1, 2, 3, 5, 10, 15, 30):
-    for kx in (1.0, 2.0, 3.0, 5.0, 8.0):
-        E = sorted(sum([build_depth(s, B, kx, 0) for s in SYM], []), key=lambda z: z[0])
-        b = rep(E, f"{B}분봉 깊이 rv×{kx} 같은봉 청산")
-        if b: res.append((b[0], B, kx, 0))
+if __name__ == "__main__":
+    P("\n" + "="*140)
+    P("[1] 초단기 깊이 프리미엄 — 봉 길이 × 깊이배수 (같은 봉 종가 청산)")
+    P("="*140)
+    res = []
+    for B in (1, 2, 3, 5, 10, 15, 30):
+        for kx in (1.0, 2.0, 3.0, 5.0, 8.0):
+            E = sorted(sum([build_depth(s, B, kx, 0) for s in SYM], []), key=lambda z: z[0])
+            b = rep(E, f"{B}분봉 깊이 rv×{kx} 같은봉 청산")
+            if b: res.append((b[0], B, kx, 0))
 
-P("\n" + "="*140)
-P("[2] 보유 연장 — 다음 봉들까지")
-P("="*140)
-for B in (1, 3, 5, 15):
-    for kx in (2.0, 3.0, 5.0):
-        for H in (1, 3, 10):
-            E = sorted(sum([build_depth(s, B, kx, H) for s in SYM], []), key=lambda z: z[0])
-            b = rep(E, f"{B}분봉 rv×{kx} +{H}봉 보유(총 {B*(H+1)}분)")
-            if b: res.append((b[0], B, kx, H))
+    P("\n" + "="*140)
+    P("[2] 보유 연장 — 다음 봉들까지")
+    P("="*140)
+    for B in (1, 3, 5, 15):
+        for kx in (2.0, 3.0, 5.0):
+            for H in (1, 3, 10):
+                E = sorted(sum([build_depth(s, B, kx, H) for s in SYM], []), key=lambda z: z[0])
+                b = rep(E, f"{B}분봉 rv×{kx} +{H}봉 보유(총 {B*(H+1)}분)")
+                if b: res.append((b[0], B, kx, H))
 
-P("\n" + "="*140)
-P("[3] 절대 깊이(bp) — rv 무관 고정")
-P("="*140)
-for B in (1, 3, 5, 15):
-    for ab in (5, 10, 20, 50, 100):
-        E = sorted(sum([build_depth(s, B, 0, 0, absbp=ab) for s in SYM], []), key=lambda z: z[0])
-        rep(E, f"{B}분봉 절대깊이 {ab}bp 같은봉 청산")
+    P("\n" + "="*140)
+    P("[3] 절대 깊이(bp) — rv 무관 고정")
+    P("="*140)
+    for B in (1, 3, 5, 15):
+        for ab in (5, 10, 20, 50, 100):
+            E = sorted(sum([build_depth(s, B, 0, 0, absbp=ab) for s in SYM], []), key=lambda z: z[0])
+            rep(E, f"{B}분봉 절대깊이 {ab}bp 같은봉 청산")
 
-P("\n" + "="*140)
-P("[4] 메이커 양방향 가정 (청산도 지정가)")
-P("="*140)
-for B in (1, 3, 5):
-    for kx in (2.0, 3.0, 5.0):
-        E = sorted(sum([build_depth(s, B, kx, 0, fee_t=2.0) for s in SYM], []), key=lambda z: z[0])
-        rep(E, f"{B}분봉 rv×{kx} 메이커왕복4bp")
+    P("\n" + "="*140)
+    P("[4] 메이커 양방향 가정 (청산도 지정가)")
+    P("="*140)
+    for B in (1, 3, 5):
+        for kx in (2.0, 3.0, 5.0):
+            E = sorted(sum([build_depth(s, B, kx, 0, fee_t=2.0) for s in SYM], []), key=lambda z: z[0])
+            rep(E, f"{B}분봉 rv×{kx} 메이커왕복4bp")
 
-P("\n" + "="*140)
-P("[5] 상위 후보 상세")
-P("="*140)
-res.sort(reverse=True)
-seen = set()
-for sc_, B, kx, H in res[:6]:
-    key = (B, kx, H)
-    if key in seen: continue
-    seen.add(key)
-    E = sorted(sum([build_depth(s, B, kx, H) for s in SYM], []), key=lambda z: z[0])
-    rep(E, f"{B}분봉 rv×{kx} +{H}봉", full=True)
+    P("\n" + "="*140)
+    P("[5] 상위 후보 상세")
+    P("="*140)
+    res.sort(reverse=True)
+    seen = set()
+    for sc_, B, kx, H in res[:6]:
+        key = (B, kx, H)
+        if key in seen: continue
+        seen.add(key)
+        E = sorted(sum([build_depth(s, B, kx, H) for s in SYM], []), key=lambda z: z[0])
+        rep(E, f"{B}분봉 rv×{kx} +{H}봉", full=True)
