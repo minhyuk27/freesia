@@ -25,20 +25,12 @@ for s in SYM:
 
 _TH = {}
 def exp_thresh(v, q, key=None, warm=200000, step=10080):
-    """확장창 분위수를 주 단위로 갱신. 직전까지의 정보만 사용. 정렬 한 번으로 O(n log n)."""
-    ck = (key, q, warm, step)
+    """확장창 분위수를 주 단위로 갱신. 직전까지의 정보만 사용."""
+    ck = (key, q)
     if ck in _TH: return _TH[ck]
     n = len(v); th = np.full(n, np.nan)
-    import bisect
-    srt = []
-    prev = 0
     for i in range(warm, n, step):
-        seg = v[prev:i]; seg = seg[np.isfinite(seg)]
-        for x in seg: bisect.insort(srt, float(x))
-        prev = i
-        if srt:
-            pos = int(q*(len(srt)-1))
-            th[i:i+step] = srt[pos]
+        th[i:i+step] = np.nanquantile(v[:i], q)
     _TH[ck] = th
     return th
 
