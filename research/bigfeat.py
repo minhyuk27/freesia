@@ -12,7 +12,7 @@ SYM = ("BTCUSDT", "ETHUSDT")
 WINS = (3, 5, 15, 30, 60, 240, 1440)
 
 
-def build_features(s):
+def build_features(s, step=15):
     k = store.load("klines_1m", s).set_index("ts")
     o, h, l, c = k.open, k.high, k.low, k.close
     qv, tb, nt = k.quote_volume, k.taker_buy_quote_volume, k.trades
@@ -89,13 +89,21 @@ def build_features(s):
     F["hour_cos"] = np.cos(2*np.pi*c.index.hour/24)
     F["dow"] = c.index.dayofweek.astype(float)
 
-    X = pd.DataFrame(F, index=c.index)
-    X = X.replace([np.inf, -np.inf], np.nan)
+    # 메모리 절약: 특징을 하나씩 float32로 변환하고 step 간격만 남긴다
+    sl = slice(None, None, step)
+    out = {}
+    for kk, vv in F.items():
+        a = np.asarray(vv, dtype=np.float32)
+        a[~np.isfinite(a)] = np.nan
+        out[kk] = a[sl]
+    X = pd.DataFrame(out, index=c.index[sl])
     return X, c
 
 
 if __name__ == "__main__":
     for s in SYM:
         X, c = build_features(s)
-        P(f"{s}: 특징 {X.shape[1]}개, 행 {len(X):,}")
-        P(f"  결측 많은 특징: " + ", ".join(X.columns[X.isna().mean() > 0.1][:10]))
+        P(f"{s}: 특징 {X.shape[1]}개, 행 {len(X):,}, 메모리 {X.memory_usage().sum()/1e6:.0f}MB")
+        bad = X.columns[X.isna().mean() > 0.1]
+        P(f"  결측 10%초과 특징 {len(bad)}개: " + ", ".join(list(bad)[:8]))
+        del X
