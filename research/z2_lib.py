@@ -8,7 +8,7 @@ STEP = int(_z["STEP"]); MAXH = int(_z["MAXH"]); MMR = float(_z["MMR"])
 SYM = [str(x) for x in _z["SYM"]]
 D = {s: {k: _z[f"{s}_{k}"] for k in ("o","h","l","c","sig","rv")} for s in SYM}
 for s in SYM:
-    D[s]["idx"] = pd.DatetimeIndex(_z[f"{s}_idx"]).tz_localize("UTC")
+    D[s]["idx"] = pd.to_datetime(_z[f"{s}_idx"], unit="ms", utc=True)
     v = D[s]["sig"]; D[s]["fin"] = v[np.isfinite(v)]
 YRS = (D["BTCUSDT"]["idx"][-1]-D["BTCUSDT"]["idx"][0]).days/365
 
