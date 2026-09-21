@@ -54,10 +54,13 @@ FE = {}
 
 
 def add(name, arr):
-    a = np.asarray(arr, float)
+    """메모리 보호: 분 단위 배열을 만들자마자 15분 간격 float32로 줄여 보관한다.
+    (라벨도 15분 격자이므로 정보 손실 없음. 150특징×350만행=4GB → 0.1GB)"""
+    a = np.asarray(arr, dtype=np.float64)
     if len(a) != N: return
     if np.isfinite(a).sum() < 100000: return
-    FE[name] = a
+    FE[name] = a[::STEP].astype(np.float32)
+    del a
 
 
 # --- metrics_5m ---
@@ -182,11 +185,13 @@ def label(o, h, l, c, up, dn, maxh, step, start, n_end):
     return y
 
 
-def exp_z(v, warmn=200000, stp=5000):
+def exp_z(v, warmn=200000//STEP, stp=5000//STEP):
+    """15분 격자 배열용 확장창 z (시점 t까지의 평균·표준편차만 사용)."""
+    v = np.asarray(v, dtype=np.float64)
     z = np.full(len(v), np.nan)
     for i in range(warmn, len(v), stp):
         x = v[:i]; x = x[np.isfinite(x)]
-        if len(x) < 1000: continue
+        if len(x) < 500: continue
         mu = x.mean(); sd = x.std()
         if sd <= 0: continue
         z[i:i+stp] = (v[i:i+stp]-mu)/sd
@@ -201,8 +206,7 @@ for bar, mh in ((0.02, 20160), (0.04, 43200)):
     P(f"\n  ══ 배리어 ±{bar*100:.0f}%  (판정가능 {np.sum(y>=0):,}, 기저 상승우선 {base:.2f}%) ══")
     rows = []
     for nm, v in FE.items():
-        z = exp_z(v)
-        zz = z[::STEP][:len(y)]
+        zz = exp_z(v)[:len(y)]
         ok = (y >= 0) & np.isfinite(zz)
         if ok.sum() < 3000: continue
         hi = np.quantile(zz[ok], 0.90); lo = np.quantile(zz[ok], 0.10)
@@ -230,7 +234,7 @@ SIG = np.nanmean(np.vstack([z[:ml] for z in Zc]), axis=0)
 top = [r[3] for r in RES[0.04][:8]]
 P(f"  {'특징':>28s} {'z2신호와 상관':>14s}")
 for nm in top:
-    z = exp_z(FE[nm])[::STEP][:ml]
+    z = exp_z(FE[nm])[:ml]
     ok = np.isfinite(z) & np.isfinite(SIG[:len(z)])
     if ok.sum() < 1000: continue
     c_ = np.corrcoef(z[ok], SIG[:len(z)][ok])[0, 1]
