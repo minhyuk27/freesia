@@ -35,17 +35,24 @@ def load(kind, sym=S):
 
 
 def to_min(df, cols):
-    """분 단위 인덱스에 맞춰 직전 값으로 채운다(룩어헤드 없음: 값은 그 시각 이후에만 쓰임)."""
+    """분 단위 인덱스에 맞춰 채우되, **데이터 자체의 주기만큼 지연**시킨다.
+
+    ★ 룩어헤드 방지의 핵심: 일봉 데이터에서 D일 00:00 타임스탬프의 값은
+      보통 D일이 끝나야 확정된다. 그걸 00:00부터 쓰면 최대 24시간을 미리 보는 것이다.
+      (이 함정에 한 번 빠졌다 — 온체인 PriceUSD가 ±2% 방향을 80% 맞혔다)
+      따라서 관측 간격의 중앙값(분)만큼 lag를 주고, 최소 1분은 항상 민다."""
     s = df.set_index("ts")[cols]
-    out = {}
     ti = pd.DatetimeIndex(s.index).floor("min").as_unit("ms")
+    gaps = np.diff(ti.asi8)/60000.0
+    lag = int(max(1, np.median(gaps))) if len(gaps) else 1
+    out = {"__lag": lag}
     pos = idx.searchsorted(ti)
     for c in cols:
         a = np.full(N, np.nan)
         v = s[c].values.astype(float)
         ok = (pos >= 0) & (pos < N)
         a[pos[ok]] = v[ok]
-        out[c] = pd.Series(a).ffill().shift(1).values   # shift로 확정된 값만
+        out[c] = pd.Series(a).ffill().shift(lag).values
     return out
 
 
@@ -68,7 +75,7 @@ m5 = load("metrics_5m")
 if m5 is not None:
     cols = [c for c in m5.columns if c != "ts"]
     mm = to_min(m5, cols)
-    P(f"  metrics_5m: {len(m5):,}행, {m5.ts.min().date()}~")
+    P(f"  metrics_5m: {len(m5):,}행, {m5.ts.min().date()}~, 지연 {mm['__lag']}분")
     oi = mm.get("sum_open_interest_value")
     if oi is not None:
         for w in (60, 240, 1440, 4320, 10080):
@@ -90,8 +97,8 @@ if m5 is not None:
 # --- funding ---
 fd = load("funding")
 if fd is not None:
-    P(f"  funding: {len(fd):,}행")
-    ff = to_min(fd, ["rate"])["rate"]
+    _f = to_min(fd, ["rate"]); P(f"  funding: {len(fd):,}행, 지연 {_f['__lag']}분")
+    ff = _f["rate"]
     add("펀딩", ff)
     for w in (1440, 4320, 10080, 43200):
         add(f"펀딩누적{w}", pd.Series(ff).rolling(w).sum().values)
@@ -101,8 +108,8 @@ if fd is not None:
 # --- premium ---
 pm = load("premium_1m")
 if pm is not None:
-    P(f"  premium_1m: {len(pm):,}행")
-    pp = to_min(pm, ["close"])["close"]
+    _p = to_min(pm, ["close"]); P(f"  premium_1m: {len(pm):,}행, 지연 {_p['__lag']}분")
+    pp = _p["close"]
     add("프리미엄", pp)
     for w in (60, 240, 1440, 4320):
         add(f"프리미엄ma{w}", pd.Series(pp).rolling(w).mean().values)
@@ -112,9 +119,9 @@ if pm is not None:
 # --- bookdepth ---
 bd = load("bookdepth")
 if bd is not None:
-    P(f"  bookdepth: {len(bd):,}행, {bd.ts.min().date()}~")
     have = [c for c in bd.columns if c != "ts"]
     bm = to_min(bd, have)
+    P(f"  bookdepth: {len(bd):,}행, {bd.ts.min().date()}~, 지연 {bm['__lag']}분")
     for lvl in (1, 2, 3, 4, 5):
         pos_, neg_ = f"n+{lvl}", f"n-{lvl}"
         if pos_ in bm and neg_ in bm:
@@ -158,8 +165,8 @@ for fn, nm, col in (("dvol_btc_1h", "내재변동성", None), ("basis_btc", "베
     df = df.rename(columns={"__ts": "ts"}).sort_values("ts").drop_duplicates("ts")
     num = [c for c in df.columns if c != "ts" and pd.api.types.is_numeric_dtype(df[c])]
     if not num: continue
-    P(f"  {fn}: {len(df):,}행, 열 {len(num)}개")
     mm2 = to_min(df, num[:6])
+    P(f"  {fn}: {len(df):,}행, 열 {len(num)}개, 지연 {mm2['__lag']}분")
     for c in num[:6]:
         v = mm2[c]
         add(f"{nm}_{c}", v)
