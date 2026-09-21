@@ -78,9 +78,9 @@ def stat(ea, er, sz=None, nom=1.0):
                 bp=er.mean()*1e4, mwr=np.mean(m > 0)*100, mser=m)
 
 
-BAR = 240; KS = (20.0, 28.0, 40.0); WS = (1.0, 3.0, 6.0)
+BAR = 720; KS = (15.0, 21.0, 30.0); WS = (1.0, 3.0, 6.0)   # [3]에서 720분봉 깊이15가 최적
 EPS, SLIP, FEE = 5.0, 10.0, 10.0
-ea, er, sz = dip(O, H, Lo, C, rv, med, BAR, *KS, *WS, EPS, SLIP, FEE, warm, N, 0, 0)
+ea, er, sz = dip(O, H, Lo, C, rv, med, BAR, *KS, *WS, EPS, SLIP, FEE, warm, N, 1, 0)  # use_size=1
 base = stat(ea, er)
 P(f"기준 구성: 4시간봉 분rv×{KS} 가중{WS}, 관통{EPS:.0f}bp 슬립{SLIP:.0f}bp 수수료{FEE:.0f}bp")
 P(f"  거래 {len(er):,}건 (연 {len(er)/Y:.0f}), 승률 {base['wr']:.2f}%, 거래당 {base['bp']:+.1f}bp, "
@@ -91,7 +91,7 @@ rng = np.random.default_rng(1234)
 vals, anns = [], []
 for it in range(300):
     off = int(rng.integers(1, BAR))
-    ea2, er2, _ = dip(O, H, Lo, C, rv, med, BAR, *KS, *WS, EPS, SLIP, FEE, warm, N, 0, off)
+    ea2, er2, _ = dip(O, H, Lo, C, rv, med, BAR, *KS, *WS, EPS, SLIP, FEE, warm, N, 1, off)
     r = stat(ea2, er2)
     if r: vals.append(r["bp"]); anns.append(r["ann"])
 vals, anns = np.array(vals), np.array(anns)
@@ -109,21 +109,22 @@ P(f"    깊이0: " + ("파산" if r0 is None else f"연 {r0['ann']:+.1f}%") +
 P(f"    rv×20: 연 {base['ann']:+.1f}%  거래당 {base['bp']:+.1f}bp  승률 {base['wr']:.2f}%  n={len(er):,}")
 
 P("\n"+"="*126); P("[2] 3단 레버리지 (사이징 유무)"); P("="*126)
+ea_ns, er_ns, _ = dip(O, H, Lo, C, rv, med, BAR, *KS, *WS, EPS, SLIP, FEE, warm, N, 0, 0)
 P(f"  {'구간':>12s} {'명목':>6s} " + " ".join(f"{lab:>26s}" for lab in ("사이징 없음", "변동성목표 사이징")))
 for lb, nom in (("무레버리지", 1), ("중간", 2), ("중간+", 3), ("공격", 5), ("최대공격", 8), ("극단", 12)):
     row = []
     for use in (None, sz):
-        r = stat(ea, er, use, nom)
+        r = stat(ea, er, use, nom) if use is not None else stat(ea_ns, er_ns, None, nom)
         row.append("           파산           " if r is None
                    else f"연{r['ann']:+8.1f}% 월{r['mon']:+6.2f}% MDD{r['mdd']:6.1f}%")
     P(f"  {lb:>12s} {nom:5d}x " + " ".join(f"{x:>26s}" for x in row))
 P(f"\n  사이징 승수: 중앙 {np.median(sz):.2f} 평균 {sz.mean():.2f} 90% {np.percentile(sz,90):.2f}")
 
 P("\n"+"="*126); P("[3] 깊이 × 봉 길이 고원 (무레버, 사이징 없음)"); P("="*126)
-P(f"  {'깊이(분rv×)':>12s} " + " ".join(f"{str(b)+'분':>14s}" for b in (60, 240, 720, 1440)))
-for mult in (5, 10, 15, 20, 28, 40, 60):
+P(f"  {'깊이(분rv×)':>12s} " + " ".join(f"{str(b)+'분':>14s}" for b in (240, 480, 720, 1440, 2880)))
+for mult in (5, 8, 10, 12, 15, 20, 28, 40):
     row = []
-    for bm in (60, 240, 720, 1440):
+    for bm in (240, 480, 720, 1440, 2880):
         ks = (mult, mult*1.4, mult*2.0)
         ea2, er2, _ = dip(O, H, Lo, C, rv, med, bm, *ks, *WS, EPS, SLIP, FEE, warm, N, 0, 0)
         r = stat(ea2, er2)
@@ -136,7 +137,7 @@ P(f"  {'관통':>7s} " + " ".join(f"{'슬립'+str(s)+'bp':>14s}" for s in (0, 10
 for eps in (0, 5, 10, 20, 40):
     row = []
     for slip in (0, 10, 20, 30, 50):
-        ea2, er2, _ = dip(O, H, Lo, C, rv, med, BAR, *KS, *WS, float(eps), float(slip), FEE, warm, N, 0, 0)
+        ea2, er2, _ = dip(O, H, Lo, C, rv, med, BAR, *KS, *WS, float(eps), float(slip), FEE, warm, N, 1, 0)
         r = stat(ea2, er2)
         row.append("     파산     " if r is None else f"{r['ann']:+8.1f}%/{r['n']/Y:4.0f}")
     P(f"  {eps:5d}bp " + " ".join(f"{x:>14s}" for x in row))
