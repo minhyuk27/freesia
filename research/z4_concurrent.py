@@ -54,7 +54,7 @@ def run(o, h, l, c, rv, med, sq, scan, nslot, th, up, dn, maxh, tot_nom, mmr,
     ent_i = np.full(nslot, -1, np.int64)
     ent_p = np.zeros(nslot); ent_sz = np.zeros(nslot)
     ntr = 0; nwin = 0; sum_r = 0.0; sum_h = 0.0
-    nopen = 0; max_open = 0
+    nopen = 0; max_open = 0; nmargin = 0
     worst_unreal = 0.0
     last_entry = -10**9
     sum_open = 0.0; nmin = 0
@@ -77,14 +77,28 @@ def run(o, h, l, c, rv, med, sq, scan, nslot, th, up, dn, maxh, tot_nom, mmr,
                 if dd < mdd: mdd = dd
                 ntr += 1; sum_r += res; sum_h += (t-ent_i[s])
                 ent_i[s] = -1; nopen -= 1
-                if cap < 0.01: return cap, mdd, ntr, nwin, sum_r, sum_h, max_open, worst_unreal, sum_open, nmin
-        # --- 미실현 역행 합산 ---
+                if cap < 0.01: return cap, mdd, ntr, nwin, sum_r, sum_h, max_open, worst_unreal, sum_open, nmin, nmargin
+        # --- 증거금 점검: 평가자산이 유지증거금 아래면 계좌 전체 청산 ---
         if nopen > 0:
-            un = 0.0
+            un = 0.0; nomsum = 0.0
             for s in range(nslot):
                 if ent_i[s] < 0: continue
                 un += ent_sz[s]*(l[t]/ent_p[s]-1.0)
+                nomsum += ent_sz[s]
             if un < worst_unreal: worst_unreal = un
+            equity = cap*(1.0 + un)
+            if equity <= cap*nomsum*mmr:
+                nmargin += 1
+                cap = equity - cap*nomsum*mmr
+                if cap < 0.0: cap = 0.0
+                for s in range(nslot):
+                    ent_i[s] = -1
+                nopen = 0
+                if cap > peak: peak = cap
+                dd = cap/peak-1.0
+                if dd < mdd: mdd = dd
+                if cap < 0.01:
+                    return cap, mdd, ntr, nwin, sum_r, sum_h, max_open, worst_unreal, sum_open, nmin, nmargin
         sum_open += nopen; nmin += 1
         if nopen > max_open: max_open = nopen
         # --- 진입 ---
@@ -114,12 +128,12 @@ def run(o, h, l, c, rv, med, sq, scan, nslot, th, up, dn, maxh, tot_nom, mmr,
                 ent_i[s] = t; ent_p[s] = c[t]; ent_sz[s] = sz
                 nopen += 1; last_entry = t
                 break
-    return cap, mdd, ntr, nwin, sum_r, sum_h, max_open, worst_unreal, sum_open, nmin
+    return cap, mdd, ntr, nwin, sum_r, sum_h, max_open, worst_unreal, sum_open, nmin, nmargin
 
 
 def sim(scan=15, nslot=1, th=0.75, up=0.01, dn=0.01, maxh=4320, tot=1.0,
         fee=10.0, use_size=1, s_lo=0.5, s_mid=1.0, s_hi=2.0, min_gap=0):
-    cap, mdd, ntr, nwin, sr, sh, mo, wu, so, nm = run(
+    cap, mdd, ntr, nwin, sr, sh, mo, wu, so, nm, nmg = run(
         O, H, Lo, C, rv, med, SQ, scan, nslot, th, up, dn, maxh, float(tot), MMR,
         fee, use_size, s_lo, s_mid, s_hi, warm, NEND, min_gap)
     if ntr < 50: return None
@@ -127,7 +141,7 @@ def sim(scan=15, nslot=1, th=0.75, up=0.01, dn=0.01, maxh=4320, tot=1.0,
     mon = ((1+ann/100)**(1/12)-1)*100 if ann > -99.99 else -100
     return dict(ann=ann, mon=mon, mdd=mdd*100, fin=cap, n=ntr, wr=nwin/ntr*100,
                 bp=sr/ntr*1e4, hold=sh/ntr, maxopen=mo, worst=wu*100,
-                avgopen=so/max(nm, 1), ruin=cap < 0.01)
+                avgopen=so/max(nm, 1), nmargin=nmg, ruin=cap < 0.01)
 
 
 if __name__ == "__main__":
