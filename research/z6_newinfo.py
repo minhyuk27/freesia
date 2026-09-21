@@ -38,7 +38,8 @@ def to_min(df, cols):
     """분 단위 인덱스에 맞춰 직전 값으로 채운다(룩어헤드 없음: 값은 그 시각 이후에만 쓰임)."""
     s = df.set_index("ts")[cols]
     out = {}
-    pos = idx.searchsorted(pd.DatetimeIndex(s.index))
+    ti = pd.DatetimeIndex(s.index).floor("min").as_unit("ms")
+    pos = idx.searchsorted(ti)
     for c in cols:
         a = np.full(N, np.nan)
         v = s[c].values.astype(float)
