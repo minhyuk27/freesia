@@ -129,7 +129,10 @@ def naive(o, c, barmin, fee_bp, start, n_end):
 
 na, nr = naive(O, C, BAR, 10.0, warm, N)
 rn = stat(na, nr)
-P(f"    시가매수-종가청산: 연 {rn['ann']:+.1f}%  거래당 {rn['bp']:+.1f}bp  승률 {rn['wr']:.2f}%  n={rn['n']:,}")
+if rn is None:
+    P(f"    시가매수-종가청산: **파산** (거래당 {nr.mean()*1e4:+.1f}bp, 승률 {np.mean(nr>0)*100:.2f}%, n={len(nr):,})")
+else:
+    P(f"    시가매수-종가청산: 연 {rn['ann']:+.1f}%  거래당 {rn['bp']:+.1f}bp  승률 {rn['wr']:.2f}%  n={rn['n']:,}")
 P(f"    딥 대기          : 연 {base['ann']:+.1f}%  거래당 {base['bp']:+.1f}bp  승률 {base['wr']:.2f}%  n={base['n']:,}")
 
 P("\n"+"="*126); P("[4] 깊이 고원 — 진짜 엣지면 깊이에 단조여야 한다"); P("="*126)
