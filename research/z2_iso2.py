@@ -45,11 +45,11 @@ for i in range(warm//STEP, len(SIG), _st//STEP):
 MU = np.zeros(len(d["c"]))
 for t in range(warm, len(d["c"])):
     mu = 1.0
-    r_ = rv[t-1]; mm = med[t]
+    r_ = rv[t]; mm = med[t]      # rv는 이미 shift(1) 적용본 — 시점 t까지의 정보
     if np.isfinite(r_) and np.isfinite(mm) and r_ > 0:
         x = mm/r_
         mu *= 0.1 if x < 0.1 else (4.0 if x > 4.0 else x)
-    j = (t-1)//STEP
+    j = t//STEP                  # 진입 판정에 쓰는 봉과 같은 봉
     s_ = SQ[j] if j < len(SQ) else np.nan
     if np.isfinite(s_): mu *= (2.0 if s_ >= 0.97 else (1.0 if s_ >= 0.90 else 0.5))
     MU[t] = mu
@@ -139,7 +139,7 @@ for lev in (1, 3, 5, 8, 12, 20, 30, 50, 75, 100, 150):
 
 P("\n"+"="*126); P("[2] 실효 손절·승률·청산 — 배율이 올라가면 무슨 일이 일어나나 (자본100% 기준)"); P("="*126)
 P(f"  {'배율':>6s} {'평균실효손절':>12s} {'승률%':>7s} {'거래수':>6s} {'청산건':>6s} {'청산비율%':>9s} {'연수익%':>10s} {'MDD%':>8s}")
-for lev in (1, 5, 12, 20, 30, 40, 50, 60, 75, 100, 150):
+for lev in (1, 3, 5, 8, 10, 12, 16, 20, 25, 30, 40, 50):
     v = sim(lev, 1.0)
     if v is None: continue
     tag = "파산" if v["ruin"] else f"{v['ann']:10.1f}"
