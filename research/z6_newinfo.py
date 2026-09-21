@@ -144,10 +144,15 @@ for fn, nm, col in (("dvol_btc_1h", "내재변동성", None), ("basis_btc", "베
                     ("stablecoins", "스테이블코인", None), ("cm_btc", "온체인", None)):
     f = R/"data"/"ext"/f"{fn}.parquet"
     if not f.exists(): continue
-    df = pd.read_parquet(f)
-    tcol = "ts" if "ts" in df.columns else df.columns[0]
-    df[tcol] = pd.to_datetime(df[tcol], utc=True)
-    df = df.rename(columns={tcol: "ts"}).sort_values("ts").drop_duplicates("ts")
+    df = pd.read_parquet(f).reset_index()
+    tcol = None
+    for cand in ("ts", "time", "date", "index", "timestamp"):
+        if cand in df.columns: tcol = cand; break
+    if tcol is None: tcol = df.columns[0]
+    df = df.loc[:, ~df.columns.duplicated()]
+    df["__ts"] = pd.to_datetime(df[tcol], utc=True, errors="coerce")
+    df = df.dropna(subset=["__ts"]).drop(columns=[tcol], errors="ignore")
+    df = df.rename(columns={"__ts": "ts"}).sort_values("ts").drop_duplicates("ts")
     num = [c for c in df.columns if c != "ts" and pd.api.types.is_numeric_dtype(df[c])]
     if not num: continue
     P(f"  {fn}: {len(df):,}행, 열 {len(num)}개")
