@@ -133,46 +133,48 @@ def build(S):
     return F
 
 
-for S in ("BTCUSDT", "ETHUSDT"):
-    d = L2.D[S]; idx = d["idx"]; N = len(d["c"])
-    KS = (15.0, 21.0, 30.0)
-    ea, er, dp, mae = dip(d["o"], d["h"], d["l"], d["c"], d["rv"], BAR, *KS,
-                          1.0, 3.0, 6.0, EPS, SLIP, FEE, warm, N)
-    F = build(S)
-    F["딥깊이"] = None  # 체결 기준 값은 따로
-    P("="*126); P(f"[{S}] 딥 {len(er):,}건, 거래당 {er.mean()*1e4:+.1f}bp, 승률 {np.mean(er>0)*100:.2f}%")
-    P("="*126)
-    rows = []
-    for nm, arr in F.items():
-        if arr is None: continue
-        v = np.asarray(arr, float)[ea]
-        ok = np.isfinite(v)
-        if ok.sum() < 300: continue
-        # 확장창 분위로 상/하위 30% 비교 (룩어헤드 없음: 과거 체결분 기준)
-        q = np.full(len(v), np.nan)
-        for i in range(200, len(v), 50):
-            x = v[:i]; x = x[np.isfinite(x)]
-            if len(x) < 100: continue
-            q[i:i+50] = np.searchsorted(np.sort(x), v[i:i+50])/len(x)
-        m = np.isfinite(q)
-        hi = m & (q >= 0.7); lo = m & (q <= 0.3)
-        if hi.sum() < 100 or lo.sum() < 100: continue
-        rows.append((er[hi].mean()*1e4 - er[lo].mean()*1e4, nm,
-                     er[hi].mean()*1e4, np.mean(er[hi] > 0)*100, int(hi.sum()),
-                     er[lo].mean()*1e4, np.mean(er[lo] > 0)*100, int(lo.sum())))
-    # 딥 깊이 자체
-    q = np.full(len(dp), np.nan)
-    for i in range(200, len(dp), 50):
-        x = dp[:i]
-        if len(x) < 100: continue
-        q[i:i+50] = np.searchsorted(np.sort(x), dp[i:i+50])/len(x)
-    m = np.isfinite(q); hi = m & (q >= 0.7); lo = m & (q <= 0.3)
-    rows.append((er[hi].mean()*1e4-er[lo].mean()*1e4, "딥깊이(체결)",
-                 er[hi].mean()*1e4, np.mean(er[hi] > 0)*100, int(hi.sum()),
-                 er[lo].mean()*1e4, np.mean(er[lo] > 0)*100, int(lo.sum())))
-    rows.sort(reverse=True)
-    P(f"  {'필터':>16s} {'차이bp':>8s} | {'상위30% bp':>11s} {'승률%':>7s} {'n':>6s} | "
-      f"{'하위30% bp':>11s} {'승률%':>7s} {'n':>6s}")
-    for diff, nm, hb, hw, hn, lb, lw, ln in rows:
-        P(f"  {nm:>16s} {diff:+8.1f} | {hb:+11.1f} {hw:7.2f} {hn:6d} | {lb:+11.1f} {lw:7.2f} {ln:6d}")
-    P("")
+if __name__ == "__main__":
+ for S in ("BTCUSDT", "ETHUSDT"):
+     d = L2.D[S]; idx = d["idx"]; N = len(d["c"])
+     KS = (15.0, 21.0, 30.0)
+     ea, er, dp, mae = dip(d["o"], d["h"], d["l"], d["c"], d["rv"], BAR, *KS,
+                           1.0, 3.0, 6.0, EPS, SLIP, FEE, warm, N)
+     F = build(S)
+     F["딥깊이"] = None  # 체결 기준 값은 따로
+     P("="*126); P(f"[{S}] 딥 {len(er):,}건, 거래당 {er.mean()*1e4:+.1f}bp, 승률 {np.mean(er>0)*100:.2f}%")
+     P("="*126)
+     rows = []
+     for nm, arr in F.items():
+         if arr is None: continue
+         v = np.asarray(arr, float)[ea]
+         ok = np.isfinite(v)
+         if ok.sum() < 300: continue
+         # 확장창 분위로 상/하위 30% 비교 (룩어헤드 없음: 과거 체결분 기준)
+         q = np.full(len(v), np.nan)
+         for i in range(200, len(v), 50):
+             x = v[:i]; x = x[np.isfinite(x)]
+             if len(x) < 100: continue
+             q[i:i+50] = np.searchsorted(np.sort(x), v[i:i+50])/len(x)
+         m = np.isfinite(q)
+         hi = m & (q >= 0.7); lo = m & (q <= 0.3)
+         if hi.sum() < 100 or lo.sum() < 100: continue
+         rows.append((er[hi].mean()*1e4 - er[lo].mean()*1e4, nm,
+                      er[hi].mean()*1e4, np.mean(er[hi] > 0)*100, int(hi.sum()),
+                      er[lo].mean()*1e4, np.mean(er[lo] > 0)*100, int(lo.sum())))
+     # 딥 깊이 자체
+     q = np.full(len(dp), np.nan)
+     for i in range(200, len(dp), 50):
+         x = dp[:i]
+         if len(x) < 100: continue
+         q[i:i+50] = np.searchsorted(np.sort(x), dp[i:i+50])/len(x)
+     m = np.isfinite(q); hi = m & (q >= 0.7); lo = m & (q <= 0.3)
+     rows.append((er[hi].mean()*1e4-er[lo].mean()*1e4, "딥깊이(체결)",
+                  er[hi].mean()*1e4, np.mean(er[hi] > 0)*100, int(hi.sum()),
+                  er[lo].mean()*1e4, np.mean(er[lo] > 0)*100, int(lo.sum())))
+     rows.sort(reverse=True)
+     P(f"  {'필터':>16s} {'차이bp':>8s} | {'상위30% bp':>11s} {'승률%':>7s} {'n':>6s} | "
+       f"{'하위30% bp':>11s} {'승률%':>7s} {'n':>6s}")
+     for diff, nm, hb, hw, hn, lb, lw, ln in rows:
+         P(f"  {nm:>16s} {diff:+8.1f} | {hb:+11.1f} {hw:7.2f} {hn:6d} | {lb:+11.1f} {lw:7.2f} {ln:6d}")
+     P("")
+ 
