@@ -130,82 +130,84 @@ def sim(scan=15, nslot=1, th=0.75, up=0.01, dn=0.01, maxh=4320, tot=1.0,
                 avgopen=so/max(nm, 1), ruin=cap < 0.01)
 
 
-P("="*130); P("[1] 슬롯 수 × 스캔 간격 (신호 상위25%, ±1%, 총명목 1배). 셀 = 연거래 / 승률% / 월%")
-P("="*130)
-P(f"  {'슬롯':>5s} " + " ".join(f"{'스캔'+str(s)+'분':>20s}" for s in (1, 5, 15, 60)))
-BEST = []
-for ns in (1, 2, 4, 8, 16, 32):
-    row = []
-    for sc in (1, 5, 15, 60):
-        v = sim(scan=sc, nslot=ns)
-        if v is None: row.append("         -          "); continue
-        tag = "파산" if v["ruin"] else f"{v['mon']:+6.2f}%"
-        row.append(f"{v['n']/Y:5.0f}/{v['wr']:5.1f}%/{tag:>7s}")
-        if not v["ruin"]: BEST.append((v["mon"], ns, sc, v))
-    P(f"  {ns:4d}개 " + " ".join(f"{x:>20s}" for x in row))
-
-P("\n"+"="*130); P("[2] 총명목 × 슬롯 (스캔 1분, ±1%, 상위25%)"); P("="*130)
-P(f"  {'총명목':>7s} " + " ".join(f"{'슬롯'+str(n):>17s}" for n in (4, 8, 16, 32, 64)))
-for tot in (1, 2, 3, 5, 8, 12, 20):
-    row = []
-    for ns in (4, 8, 16, 32, 64):
-        v = sim(scan=1, nslot=ns, tot=tot)
-        if v is None: row.append("        -        "); continue
-        row.append("      파산       " if v["ruin"] else f"{v['mon']:+7.2f}%/{v['mdd']:6.1f}%")
-        if not v["ruin"]: BEST.append((v["mon"], ns, 1, v))
-    P(f"  {tot:6.1f}x " + " ".join(f"{x:>17s}" for x in row))
-
-P("\n"+"="*130); P("[3] 배리어 × 슬롯 (스캔 1분, 총명목 3배, 상위25%)"); P("="*130)
-P(f"  {'배리어':>8s} " + " ".join(f"{'슬롯'+str(n):>20s}" for n in (8, 16, 32, 64)))
-for bar in (0.003, 0.005, 0.0075, 0.01, 0.015, 0.02):
-    row = []
-    for ns in (8, 16, 32, 64):
-        v = sim(scan=1, nslot=ns, tot=3.0, up=bar, dn=bar, maxh=min(4320, int(bar*400000)))
-        if v is None: row.append("         -          "); continue
-        row.append("        파산        " if v["ruin"]
-                   else f"{v['n']/Y:5.0f}/{v['wr']:4.1f}/{v['mon']:+6.2f}%")
-        if not v["ruin"]: BEST.append((v["mon"], ns, 1, v))
-    P(f"  ±{bar*100:5.2f}% " + " ".join(f"{x:>20s}" for x in row))
-P("  (셀 = 연거래 / 승률% / 월%)")
-
-P("\n"+"="*130); P("[4] 진입 문턱 완화 — 빈도를 더 올릴 수 있나 (스캔1분, 슬롯32, 총3배, ±1%)"); P("="*130)
-P(f"  {'문턱':>10s} {'연거래':>8s} {'하루':>7s} {'승률%':>7s} {'거래당bp':>9s} {'평균보유':>9s} "
-  f"{'최대동시':>8s} {'평균동시':>8s} {'월%':>9s} {'MDD%':>8s}")
-for th in (0.95, 0.90, 0.84, 0.75, 0.60, 0.40, 0.0):
-    v = sim(scan=1, nslot=32, tot=3.0, th=th)
-    if v is None: continue
-    P(f"  상위{(1-th)*100:5.0f}% {v['n']/Y:8.0f} {v['n']/Y/365:7.2f} {v['wr']:7.2f} {v['bp']:+9.1f} "
-      f"{v['hold']:8.0f}분 {v['maxopen']:8d} {v['avgopen']:8.2f} "
-      + ("    파산" if v["ruin"] else f"{v['mon']:+9.2f}") + f" {v['mdd']:8.1f}")
-
-P("\n"+"="*130); P("[5] 최고 구성 상위 10 (월수익 기준)"); P("="*130)
-BEST.sort(key=lambda x: -x[0])
-seen = set(); shown = 0
-P(f"  {'월%':>8s} {'연%':>12s} {'MDD%':>8s} {'연거래':>8s} {'하루':>7s} {'승률%':>7s} "
-  f"{'최대동시':>8s} {'최악미실현%':>11s} {'슬롯':>5s}")
-for mon, ns, sc, v in BEST:
-    k = (round(mon, 2), ns, v["n"])
-    if k in seen: continue
-    seen.add(k)
-    P(f"  {mon:+8.2f} {v['ann']:12.1f} {v['mdd']:8.1f} {v['n']/Y:8.0f} {v['n']/Y/365:7.2f} "
-      f"{v['wr']:7.2f} {v['maxopen']:8d} {v['worst']:11.1f} {ns:5d}")
-    shown += 1
-    if shown >= 10: break
-
-P("\n"+"="*130); P("[6] 월 +80% 달성 여부 점검"); P("="*130)
-ok = [x for x in BEST if x[0] >= 80.0]
-if ok:
-    P(f"  ★ 월 +80% 이상 구성 {len(ok)}개 발견")
-    for mon, ns, sc, v in ok[:5]:
-        P(f"    월 {mon:+.2f}% / 연 {v['ann']:,.0f}% / MDD {v['mdd']:.1f}% / 연거래 {v['n']/Y:.0f} "
-          f"/ 승률 {v['wr']:.2f}% / 슬롯 {ns}")
-else:
-    top = BEST[0] if BEST else None
-    if top:
-        P(f"  최고 월 {top[0]:+.2f}% (목표 +80% 대비 {(1+top[0]/100)/1.8:.4f}배)")
-        v = top[3]
-        P(f"    연거래 {v['n']/Y:.0f}(하루 {v['n']/Y/365:.2f}), 승률 {v['wr']:.2f}%, "
-          f"거래당 {v['bp']:+.1f}bp, 최대동시 {v['maxopen']}개, 최악 미실현 {v['worst']:.1f}%")
-        need_n = np.log(1.8)*12/max(np.log(1+v['bp']/1e4), 1e-9)
-        P(f"    같은 거래당 엣지로 월 +80%를 내려면 연 {need_n:,.0f}건 필요 "
-          f"(현재의 {need_n/(v['n']/Y):,.0f}배)")
+if __name__ == "__main__":
+    P("="*130); P("[1] 슬롯 수 × 스캔 간격 (신호 상위25%, ±1%, 총명목 1배). 셀 = 연거래 / 승률% / 월%")
+    P("="*130)
+    P(f"  {'슬롯':>5s} " + " ".join(f"{'스캔'+str(s)+'분':>20s}" for s in (1, 5, 15, 60)))
+    BEST = []
+    for ns in (1, 2, 4, 8, 16, 32):
+        row = []
+        for sc in (1, 5, 15, 60):
+            v = sim(scan=sc, nslot=ns)
+            if v is None: row.append("         -          "); continue
+            tag = "파산" if v["ruin"] else f"{v['mon']:+6.2f}%"
+            row.append(f"{v['n']/Y:5.0f}/{v['wr']:5.1f}%/{tag:>7s}")
+            if not v["ruin"]: BEST.append((v["mon"], ns, sc, v))
+        P(f"  {ns:4d}개 " + " ".join(f"{x:>20s}" for x in row))
+    
+    P("\n"+"="*130); P("[2] 총명목 × 슬롯 (스캔 1분, ±1%, 상위25%)"); P("="*130)
+    P(f"  {'총명목':>7s} " + " ".join(f"{'슬롯'+str(n):>17s}" for n in (4, 8, 16, 32, 64)))
+    for tot in (1, 2, 3, 5, 8, 12, 20):
+        row = []
+        for ns in (4, 8, 16, 32, 64):
+            v = sim(scan=1, nslot=ns, tot=tot)
+            if v is None: row.append("        -        "); continue
+            row.append("      파산       " if v["ruin"] else f"{v['mon']:+7.2f}%/{v['mdd']:6.1f}%")
+            if not v["ruin"]: BEST.append((v["mon"], ns, 1, v))
+        P(f"  {tot:6.1f}x " + " ".join(f"{x:>17s}" for x in row))
+    
+    P("\n"+"="*130); P("[3] 배리어 × 슬롯 (스캔 1분, 총명목 3배, 상위25%)"); P("="*130)
+    P(f"  {'배리어':>8s} " + " ".join(f"{'슬롯'+str(n):>20s}" for n in (8, 16, 32, 64)))
+    for bar in (0.003, 0.005, 0.0075, 0.01, 0.015, 0.02):
+        row = []
+        for ns in (8, 16, 32, 64):
+            v = sim(scan=1, nslot=ns, tot=3.0, up=bar, dn=bar, maxh=min(4320, int(bar*400000)))
+            if v is None: row.append("         -          "); continue
+            row.append("        파산        " if v["ruin"]
+                       else f"{v['n']/Y:5.0f}/{v['wr']:4.1f}/{v['mon']:+6.2f}%")
+            if not v["ruin"]: BEST.append((v["mon"], ns, 1, v))
+        P(f"  ±{bar*100:5.2f}% " + " ".join(f"{x:>20s}" for x in row))
+    P("  (셀 = 연거래 / 승률% / 월%)")
+    
+    P("\n"+"="*130); P("[4] 진입 문턱 완화 — 빈도를 더 올릴 수 있나 (스캔1분, 슬롯32, 총3배, ±1%)"); P("="*130)
+    P(f"  {'문턱':>10s} {'연거래':>8s} {'하루':>7s} {'승률%':>7s} {'거래당bp':>9s} {'평균보유':>9s} "
+      f"{'최대동시':>8s} {'평균동시':>8s} {'월%':>9s} {'MDD%':>8s}")
+    for th in (0.95, 0.90, 0.84, 0.75, 0.60, 0.40, 0.0):
+        v = sim(scan=1, nslot=32, tot=3.0, th=th)
+        if v is None: continue
+        P(f"  상위{(1-th)*100:5.0f}% {v['n']/Y:8.0f} {v['n']/Y/365:7.2f} {v['wr']:7.2f} {v['bp']:+9.1f} "
+          f"{v['hold']:8.0f}분 {v['maxopen']:8d} {v['avgopen']:8.2f} "
+          + ("    파산" if v["ruin"] else f"{v['mon']:+9.2f}") + f" {v['mdd']:8.1f}")
+    
+    P("\n"+"="*130); P("[5] 최고 구성 상위 10 (월수익 기준)"); P("="*130)
+    BEST.sort(key=lambda x: -x[0])
+    seen = set(); shown = 0
+    P(f"  {'월%':>8s} {'연%':>12s} {'MDD%':>8s} {'연거래':>8s} {'하루':>7s} {'승률%':>7s} "
+      f"{'최대동시':>8s} {'최악미실현%':>11s} {'슬롯':>5s}")
+    for mon, ns, sc, v in BEST:
+        k = (round(mon, 2), ns, v["n"])
+        if k in seen: continue
+        seen.add(k)
+        P(f"  {mon:+8.2f} {v['ann']:12.1f} {v['mdd']:8.1f} {v['n']/Y:8.0f} {v['n']/Y/365:7.2f} "
+          f"{v['wr']:7.2f} {v['maxopen']:8d} {v['worst']:11.1f} {ns:5d}")
+        shown += 1
+        if shown >= 10: break
+    
+    P("\n"+"="*130); P("[6] 월 +80% 달성 여부 점검"); P("="*130)
+    ok = [x for x in BEST if x[0] >= 80.0]
+    if ok:
+        P(f"  ★ 월 +80% 이상 구성 {len(ok)}개 발견")
+        for mon, ns, sc, v in ok[:5]:
+            P(f"    월 {mon:+.2f}% / 연 {v['ann']:,.0f}% / MDD {v['mdd']:.1f}% / 연거래 {v['n']/Y:.0f} "
+              f"/ 승률 {v['wr']:.2f}% / 슬롯 {ns}")
+    else:
+        top = BEST[0] if BEST else None
+        if top:
+            P(f"  최고 월 {top[0]:+.2f}% (목표 +80% 대비 {(1+top[0]/100)/1.8:.4f}배)")
+            v = top[3]
+            P(f"    연거래 {v['n']/Y:.0f}(하루 {v['n']/Y/365:.2f}), 승률 {v['wr']:.2f}%, "
+              f"거래당 {v['bp']:+.1f}bp, 최대동시 {v['maxopen']}개, 최악 미실현 {v['worst']:.1f}%")
+            need_n = np.log(1.8)*12/max(np.log(1+v['bp']/1e4), 1e-9)
+            P(f"    같은 거래당 엣지로 월 +80%를 내려면 연 {need_n:,.0f}건 필요 "
+              f"(현재의 {need_n/(v['n']/Y):,.0f}배)")
+    
