@@ -6,7 +6,7 @@
   체결: 진입 시장가(테이커 5bp+슬리피지 2bp), 익절 지정가(메이커 2bp), 손절·시간 청산 시장가(5+2bp).
         같은 분에 익절·손절 모두 닿으면 손절로 처리(보수).
   수익은 오직 '방향을 맞히는 것'에서 나온다: 맞으면 +15d, 틀리면 −15d (수수료 별도).
-진입 신호는 교체 가능한 부품(entries: ts, sym, side). 이번에는 신호 품질을 미루고,
+진입 신호는 교체 가능한 부품: simulate_entries(entries[ts, sym, side], d, H). 이번에는 신호 품질을 미루고,
   '정답을 확률 p로 고르는 신호'(오라클)를 무작위 시각에 넣어 승률 p → 계좌 성과를 실제 가격 경로로 환산한다.
   정답 = 그 시각에 롱·숏 중 익절에 먼저 닿는 쪽(둘 다 안 닿으면 시간 청산 수익이 큰 쪽).
 사용: python research/r47_x30_frame.py"""
@@ -103,6 +103,31 @@ def run(O, d, H, p, per_week, rng):
     return e, nt / weeks, np.array(kinds)
 
 
+def simulate_entries(entries, d, H):
+    """실제 진입 신호용 입구. entries: DataFrame(ts[UTC, 분 단위], sym, side[+1/-1]).
+    같은 규칙(증거금 50%·30배·±d·H분·마크 청산)으로 한 번에 한 포지션 계좌를 돌려 (자본 경로, 거래표) 반환."""
+    rows = []
+    for s_, g in entries.groupby("sym"):
+        k = store.load("klines_1m", s_).set_index("ts")
+        mk = store.load("mark_1m", s_).set_index("ts").reindex(k.index).ffill()
+        pos = k.index.get_indexer(pd.DatetimeIndex(g.ts).floor("min"))
+        ok = (pos >= 0) & (pos < len(k) - H - 1)
+        for side in (1, -1):
+            m = ok & (g.side.values == side)
+            if not m.any(): continue
+            r, kd, tt = outcome(k.open.values, k.high.values, k.low.values, k.close.values,
+                                mk.high.values, mk.low.values, pos[m].astype(np.int64), side, d, LIQ, H, CT, CM)
+            rows.append(pd.DataFrame({"ts": k.index[pos[m]], "sym": s_, "side": side, "r": r, "kind": kd, "min": tt}))
+    T = pd.concat(rows).sort_values("ts").reset_index(drop=True)
+    cap = 1.0; busy = None; eq = []; used = []
+    for _, t in T.iterrows():
+        if busy is not None and t.ts < busy: continue
+        cap *= (1 - MARGIN - NOT * CT) if t.kind == -2 else max(1 + NOT * t.r, 1 - MARGIN)
+        busy = t.ts + pd.Timedelta(minutes=int(t["min"]) + 1)
+        eq.append((t.ts, cap)); used.append(t)
+    return pd.Series([x[1] for x in eq], index=pd.DatetimeIndex([x[0] for x in eq])), pd.DataFrame(used)
+
+
 def stat(e):
     d = e.resample("D").last().ffill()
     yrs = (d.index[-1] - d.index[0]).days / 365.25
@@ -117,7 +142,6 @@ if __name__ == "__main__":
     P(f"\n규칙: 증거금 {MARGIN:.0%} × {LEV:.0f}배 = 명목 자본 × {NOT:.0f}, 강제청산 거리 {LIQ*100:.2f}%")
     P("이론 손익분기 승률(대칭 ±d, 시간청산 무시): 산술 p* = 0.5 + 비용/(2d), 로그성장 기준은 더 높다")
     for d in DS:
-        c = 2 * CT - (CT - CM) / 2
         w, lo = NOT * (d - CT - CM), NOT * (d + 2 * CT)
         pg = np.log(1 + lo) / (np.log(1 + w) + np.log(1 + lo)) if lo < 1 else np.nan
         P(f"  ±{d*100:.1f}%: 맞으면 자본 +{w*100:.1f}%, 틀리면 −{lo*100:.1f}% | 산술 본전 {lo/(w+lo)*100:.1f}% · 로그 본전 {pg*100:.1f}%")
