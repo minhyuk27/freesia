@@ -74,8 +74,9 @@ def build():
                 r, lq = label(d["o"], d["h"], d["l"], d["c"], mh, ml, idx, side, liqd, tp, H)
                 tph = (tp > 0) & (np.abs(r - tp) < 1e-12) & ~lq
                 df[f"m{tp}"] = mult(r, lq, tph).astype(np.float32)
+                df[f"liq{tp}"] = lq
                 if tp == 0:
-                    df["liq"] = lq; df["r12"] = r.astype(np.float32)
+                    df["r12"] = r.astype(np.float32)
             rows.append(df)
         P(f"{s} 후보 {len(idx):,} × 2방향")
     return pd.concat(rows, ignore_index=True)
@@ -116,9 +117,9 @@ if __name__ == "__main__":
         g = E[(E.side == side) & (E.yr >= 2021)]
         for tp in TPS:
             m = g[f"m{tp}"]
-            P(f"  {'롱' if side>0 else '숏'} TP{tp*100:.1f}%: 청산 {g.liq.mean():.3f} | 배율 평균 {m.mean():.3f} "
+            P(f"  {'롱' if side>0 else '숏'} TP{tp*100:.1f}%: 청산 {g[f'liq{tp}'].mean():.3f} | 배율 평균 {m.mean():.3f} "
               f"ln평균 {np.log(m).mean():+.4f} 이익확률 {(m>1).mean():.3f}")
-    FEAT = [c for c in E.columns if c not in {"sym", "t", "ts", "side", "liq", "r12", "yr"} and not c.startswith("m")]
+    FEAT = [c for c in E.columns if c not in {"sym", "t", "ts", "side", "r12", "yr"} and not c.startswith("m") and not c.startswith("liq")]
     FEAT = FEAT + ["side"]
     E["isbtc"] = (E.sym == "BTCUSDT").astype(float); FEAT.append("isbtc")
     E = E.replace([np.inf, -np.inf], np.nan)
@@ -149,7 +150,7 @@ if __name__ == "__main__":
                 if r.t < busy: continue
                 taken.append(r); busy = r.t + H
             T = pd.DataFrame(taken)
-            P(f"  진입 거래: 청산 {T.liq.mean():.3f} 이익 {(T[mc]>1).mean():.3f} 배율 평균 {T[mc].mean():.3f} "
+            P(f"  진입 거래: 청산 {T[f'liq{tp}'].mean():.3f} 이익 {(T[mc]>1).mean():.3f} 배율 평균 {T[mc].mean():.3f} "
               f"ln평균 {np.log(T[mc]).mean():+.4f} | 롱 {(T.side>0).mean():.2f} | 연도별 ln평균 " +
               " ".join(f"{y%100}{np.log(g[mc]).mean():+.3f}({len(g)})" for y, g in T.groupby(T.ts.dt.year)))
         summ(eq, "모델 선택 (원 규칙)", n_tr, weeks)
