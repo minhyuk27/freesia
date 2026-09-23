@@ -7,7 +7,7 @@ import numpy as np, pandas as pd
 warnings.filterwarnings("ignore")
 R = Path(__file__).resolve().parents[1]; sys.path.insert(0, str(R)); sys.path.insert(0, str(R / "research"))
 from meta_strong import attach, FEAT, SYM
-from z06b import build as build_z6
+from z0_6b import build as build_z6
 from sklearn.linear_model import QuantileRegressor, LogisticRegression, Ridge
 from sklearn.preprocessing import StandardScaler
 from sklearn.ensemble import HistGradientBoostingRegressor

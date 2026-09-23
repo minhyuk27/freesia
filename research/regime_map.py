@@ -7,8 +7,8 @@ warnings.filterwarnings("ignore")
 R = Path(__file__).resolve().parents[1]; sys.path.insert(0, str(R)); sys.path.insert(0, str(R / "research"))
 from meta_strong import attach, FEAT, SYM
 from anchor import build_a
-from z06b import build as build_z6
-from z07_dev import build as build_z7
+from z0_6b import build as build_z6
+from z0_7_dev import build as build_z7
 from sklearn.linear_model import LogisticRegression
 from sklearn.preprocessing import StandardScaler
 import exit_tier as X
