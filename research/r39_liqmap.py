@@ -31,7 +31,7 @@ def build(lp, lh, ll, oi, g0, nb, lev, wgt, mmr, binw, hl):
     K = (1, 2, 4)
     out = np.full((n, 8), np.nan)       # dnL1 dnL2 dnL4 upS1 upS2 upS4 swL swS
     for t in range(1, n):
-        if np.isnan(oi[t]) or np.isnan(oi[t - 1]) or oi[t - 1] <= 0:
+        if np.isnan(oi[t]) or np.isnan(oi[t - 1]) or oi[t - 1] <= 0 or oi[t] <= 0:
             continue
         mL *= dec; mS *= dec
         d = oi[t] - oi[t - 1]
