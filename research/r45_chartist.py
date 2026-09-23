@@ -10,14 +10,14 @@
      손절 = min(터치 후 최저, 0.786 되돌림) − 0.1ATR. L2 이탈 시 무효.
   S3 깃발 돌파: 구조 상승 중 직전 6봉 범위 ≤ 2ATR, 그 전 6봉 상승 ≥ 2ATR(깃대)
      → 15분 종가가 횡보 고점 돌파 시 진입. 손절 = 횡보 저점 − 0.1ATR
-  공통: 손절거리 0.15~1.5 ATR만 허용, 목표 = 진입 + R×손절거리(지정가) 또는 추적(+1R 본전 → 최고가−1ATR).
+  공통: 손절거리 0.15~1.5 ATR만 허용(S3는 2.5 ATR), 목표 = 진입 + R×손절거리(지정가) 또는 추적(+1R 본전 → 최고가−1ATR).
        시간대 두 벌: 4시간/15분(72시간 제한), 일봉/1시간(10일 제한).
        같은 15분봉에서 손절·목표 모두 닿으면 손절로 처리(보수). 손절은 봉 시가가 이미 넘었으면 시가 체결.
   숏 = 가격을 역수로 뒤집어 같은 롱 엔진에 넣는다(고저 교환).
 비용: 진입 테이커 5+2bp, 손절·시간청산 테이커 5+2bp, 목표 지정가 메이커 2bp.
 판정: 파라미터(k, tol, R)는 2020~2022에서만 고르고 2023~2026 고정 평가.
 위약: 같은 추세 조건의 무작위 15분 진입 + 실제 거래와 같은 손절거리·R 목표 → '레벨+트리거'의 순수 기여 분리.
-사용: python research/r45_chartist.py"""
+사용: python research/r45_chartist.py [셋업만 예: S3]"""
 import sys, warnings, itertools
 from pathlib import Path
 import numpy as np, pandas as pd, numba
@@ -143,7 +143,7 @@ def run(m, g, pos, setup, k, tol, Rm, tlim=TLIM):
             if ent is None: continue
             i0, st, A0 = ent
             e = o[i0]; dist = e - st
-            if not (0.15 * A0 <= dist <= 1.5 * A0): continue
+            if not (0.15 * A0 <= dist <= (2.5 if setup == "S3" else 1.5) * A0): continue
             if Rm > 0:
                 jx, r, mae = exit_sim(o, h, l, c, i0, st, e + Rm * dist, tlim, CT, CM)
             else:
@@ -174,6 +174,7 @@ def placebo(m, T, Rm, rng, tlim=TLIM):
 
 if __name__ == "__main__":
     RS = (1.5, 2.0, 3.0, 0.0)                                   # 0 = 추적 손절(이익은 달리게)
+    ONLY = sys.argv[1] if len(sys.argv) > 1 else None
     GRID = {"S1": list(itertools.product((2, 3), (0.25, 0.5), RS)),
             "S2": list(itertools.product((2, 3), (0.25, 0.5), RS)),
             "S3": list(itertools.product((2, 3), (0.0,), RS))}
@@ -184,6 +185,7 @@ if __name__ == "__main__":
     for lo, hi, tl in TFS:
         D = {(s_, inv): prep(s_, inv, lo, hi) for s_ in ("BTCUSDT", "ETHUSDT") for inv in (False, True)}
         for setup, grid in GRID.items():
+            if ONLY and setup != ONLY: continue
             for inv in (False, True):
                 side = "숏" if inv else "롱"
                 res = []
@@ -205,4 +207,4 @@ if __name__ == "__main__":
                   " ".join(f"{y%100}{v:+.2f}" for y, v in by.items()))
                 P("   학습 상위 5의 평가 R: " + " ".join(f"{q[1]}→{q[2][q[2].t_in>=SPLIT].R.mean():+.3f}" for q in res[:5]))
                 allbest.append(T.assign(setup=setup, side=side, par=str(p), tf=hi))
-    pd.concat(allbest).to_parquet(R / "data" / "r45_trades.parquet")
+    pd.concat(allbest).to_parquet(R / "data" / f"r45_trades{ONLY or ''}.parquet")
