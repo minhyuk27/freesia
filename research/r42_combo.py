@@ -23,7 +23,7 @@ for s in ("BTCUSDT", "ETHUSDT"):
     ts = store.load("klines_1m", s).ts
     m = B.sym == s
     B.loc[m, "ts"] = ts.values[B.loc[m, "ent"].values]
-B["ts"] = pd.DatetimeIndex(B.ts)
+B["ts"] = pd.to_datetime(B.ts, utc=True)
 t0 = DIP.ts.min()
 B = B[B.ts >= t0]
 DIP["kind"] = 0; DIP["mult"] = np.minimum(V1[2.0] * V2, 6.0)
