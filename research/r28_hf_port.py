@@ -4,7 +4,7 @@
       동시 보유 명목 합 ≤ 자본 × Nmax. 같은 종목 다중 층은 하나의 큰 포지션으로 합산된다.
 청산 점검: 열린 포지션 전부가 동시에 각자의 MAE를 맞는다고 가정(보수적). 합계 손실 ≥ 자본×(1−MMR)이면 파산.
 비용 민감도: 거래당 추가 비용(슬리피지·관통 악화) +3·+6·+10bp.
-사용: python research/r28_hf_port.py"""
+사용: python research/r28_hf_port.py [접미사 예: _e5]"""
 import sys, warnings
 from pathlib import Path
 import numpy as np, pandas as pd
@@ -12,7 +12,8 @@ warnings.filterwarnings("ignore")
 R = Path(__file__).resolve().parents[1]
 P = lambda *a: print(" ".join(str(x) for x in a), flush=True)
 MMR = 0.005
-W = pd.read_parquet(R / "data" / "r27_wf.parquet")
+SUF = sys.argv[1] if len(sys.argv) > 1 else ""
+W = pd.read_parquet(R / "data" / f"r27_wf{SUF}.parquet")
 W["ts"] = pd.DatetimeIndex(W.ts)
 W = W.sort_values(["f", "sym"]).reset_index(drop=True)
 # 종목별 분 인덱스는 두 종목이 같은 시간축(연속 1분)이라 f를 공통 시계로 쓴다

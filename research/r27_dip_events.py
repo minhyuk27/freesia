@@ -6,7 +6,7 @@
       봉 안에서 첫 터치 분 f의 조건이 거짓이면 그 봉은 건너뛴다(이미 터치됐는지는 f-1에 관측 가능).
       따라서 특징은 전부 f-1 종료 시점까지의 값이다.
 출력: data/r27_events.parquet
-사용: python research/r27_dip_events.py"""
+사용: python research/r27_dip_events.py [관통bp=2]"""
 import sys, warnings
 from pathlib import Path
 import numpy as np, pandas as pd, numba
@@ -18,6 +18,8 @@ P = lambda *a: print(" ".join(str(x) for x in a), flush=True)
 SYM = ("BTCUSDT", "ETHUSDT")
 BARS = (5, 10, 15, 30, 60)
 KS = (3.0, 4.0, 5.0, 6.0, 8.0)
+EPS_BP = float(sys.argv[1]) if len(sys.argv) > 1 else 2.0
+SUF = "" if EPS_BP == 2.0 else f"_e{EPS_BP:g}"
 
 
 def feats(s):
@@ -72,7 +74,7 @@ for s in SYM:
     P(f"{s} 특징 {len(F)}개 준비")
     for B in BARS:
         for kx in KS:
-            a, b, r, m = run(d["o"], d["h"], d["l"], d["c"], d["rv1"], B, 1, kx, 0, 1.0, 0, EPS, FM, FT)
+            a, b, r, m = run(d["o"], d["h"], d["l"], d["c"], d["rv1"], B, 1, kx, 0, 1.0, 0, EPS_BP / 1e4, FM, FT)
             if len(a) == 0: continue
             fm1 = a - 1
             df = pd.DataFrame({"sym": s, "B": B, "k": kx, "f": a, "x": b, "ret": r, "mae": m,
@@ -85,6 +87,6 @@ for s in SYM:
 E = pd.concat(rows, ignore_index=True)
 for c_ in E.columns:
     if E[c_].dtype == np.float64: E[c_] = E[c_].astype(np.float32)
-out = R / "data" / "r27_events.parquet"
+out = R / "data" / f"r27_events{SUF}.parquet"
 E.to_parquet(out, index=False)
 P(f"저장 {out} {E.shape}")

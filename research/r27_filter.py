@@ -3,7 +3,7 @@
 [1] 단일 특징 5분위: 경계는 2020~2022에서만 정하고 2023~2026에서 거래당 bp를 본다.
 [2] 워크포워드 부스팅: 연도 Y 평가 = Y 이전 전 연도로 학습(확장창). 예측 순수익(비용 포함) > 문턱만 거래.
 [3] 플라시보: 학습 라벨을 연도 안에서 섞어 같은 절차 — 선택 행위만으로 생기는 가짜 엣지 크기.
-사용: python research/r27_filter.py"""
+사용: python research/r27_filter.py [접미사 예: _e5]"""
 import sys, warnings
 from pathlib import Path
 import numpy as np, pandas as pd
@@ -11,7 +11,8 @@ from sklearn.ensemble import HistGradientBoostingRegressor
 warnings.filterwarnings("ignore")
 R = Path(__file__).resolve().parents[1]
 P = lambda *a: print(" ".join(str(x) for x in a), flush=True)
-E = pd.read_parquet(R / "data" / "r27_events.parquet")
+SUF = sys.argv[1] if len(sys.argv) > 1 else ""
+E = pd.read_parquet(R / "data" / f"r27_events{SUF}.parquet")
 E["yr"] = pd.DatetimeIndex(E.ts).year
 E["isbtc"] = (E.sym == "BTCUSDT").astype(float)
 YEARS = (pd.Timestamp(E.ts.max()) - pd.Timestamp(E.ts.min())).days / 365.25
@@ -89,5 +90,5 @@ P("\n[3] 플라시보 — 라벨 연도내 셔플 3회")
 for sd in range(3):
     summary(walk(E, label_shuffle=True, seed=sd), f"셔플 {sd}")
 
-W.to_parquet(R / "data" / "r27_wf.parquet", index=False)
-P("\n저장 data/r27_wf.parquet")
+W.to_parquet(R / "data" / f"r27_wf{SUF}.parquet", index=False)
+P(f"\n저장 data/r27_wf{SUF}.parquet")
