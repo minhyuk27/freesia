@@ -26,6 +26,7 @@ MAP = {"BTCUSDT": ("BTC", "BTCUSD"), "ETHUSDT": ("ETH", "ETHUSD")}
 
 def option_buckets(cur):
     files = sorted((store.PQ / "deribit_opt" / cur).glob("*.parquet"))
+    if not files: return None
     rows = []
     for f in files:
         x = pd.read_parquet(f)
@@ -74,7 +75,8 @@ if __name__ == "__main__":
         g = L[L.sym == s].copy()
         F = option_buckets(cur)
         # 격자 t(분 시작)에서 쓸 수 있는 최신 값: 인덱스 ≤ t 인 버킷 (버킷 끝 시각 기준이므로 인과적)
-        g = pd.merge_asof(g.sort_values("ts"), F.rename_axis("ts").reset_index(), on="ts", direction="backward")
+        if F is not None:
+            g = pd.merge_asof(g.sort_values("ts"), F.rename_axis("ts").reset_index(), on="ts", direction="backward")
         cbk = store.load("coinbase_1m", cb)
         if cbk is not None:
             bn = store.load("klines_1m", s).set_index("ts").close
@@ -86,7 +88,7 @@ if __name__ == "__main__":
             X.index = X.index + pd.Timedelta(minutes=1)       # 분 봉 끝난 뒤 사용
             g = pd.merge_asof(g.sort_values("ts"), X.rename_axis("ts").reset_index(), on="ts", direction="backward")
         out.append(g)
-        P(f"{s} D 특징 완료: 옵션 커버 {g.rr25.notna().mean():.2f}" + (f", 코인베이스 {g.cbp.notna().mean():.2f}" if "cbp" in g else ""))
+        P(f"{s} D 특징 완료: 옵션 커버 {g.rr25.notna().mean() if 'rr25' in g else 0:.2f}" + (f", 코인베이스 {g.cbp.notna().mean():.2f}" if "cbp" in g else ""))
     O = pd.concat(out, ignore_index=True).drop(columns=["ts"])
     for c in O.columns:
         if O[c].dtype == np.float64: O[c] = O[c].astype(np.float32)
