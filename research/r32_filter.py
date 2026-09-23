@@ -39,8 +39,9 @@ def walk(feats, shuffle=False, seed=0):
         if shuffle:
             for yy in tr.yr.unique():
                 mk = (tr.yr == yy).values; y[mk] = rng.permutation(y[mk])
-        m = mdl(seed).fit(tr[feats].values, y)
-        out.append(te.assign(pred=m.predict(te[feats].values)))
+        fu = [c for c in feats if tr[c].notna().sum() > 1000]   # 호가 특징은 2023 이전 결측
+        m = mdl(seed).fit(tr[fu].values, y)
+        out.append(te.assign(pred=m.predict(te[fu].values)))
     return pd.concat(out)
 
 
