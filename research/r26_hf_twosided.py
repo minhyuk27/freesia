@@ -14,10 +14,10 @@ from pathlib import Path
 import numpy as np, pandas as pd, numba
 warnings.filterwarnings("ignore")
 R = Path(__file__).resolve().parents[1]; sys.path.insert(0, str(R)); sys.path.insert(0, str(R / "research"))
-from freesia import store
+from freesia import store, costs
 P = lambda *a: print(" ".join(str(x) for x in a), flush=True)
 SYM = ("BTCUSDT", "ETHUSDT")
-EPS = 0.0002; FM = 2.0; FT = 5.0
+EPS = 0.0002; FM = costs.MAKER * 1e4; FT = costs.TAKER * 1e4   # bp, 단일 출처 costs.py
 D = {}
 for s in SYM:
     k = store.load("klines_1m", s).set_index("ts")
