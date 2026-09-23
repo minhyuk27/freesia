@@ -30,6 +30,23 @@ TLIM = 72 * 4
 
 
 @numba.njit(cache=True)
+def exit_trail(o, h, l, c, i0, stop, dist, trail, tlim, ct):
+    """+1R 도달 시 본전 손절, 이후 최고가 − trail 추적. 목표 없음(이익은 달리게)."""
+    e = o[i0]; worst = l[i0]; best = h[i0]; n = len(c)
+    for j in range(i0, min(i0 + tlim, n)):
+        if j > i0 and o[j] <= stop:
+            return j, o[j] / e - 1 - 2 * ct, 1 - min(worst, o[j]) / e
+        if l[j] <= stop:
+            return j, stop / e - 1 - 2 * ct, 1 - min(worst, stop) / e
+        if l[j] < worst: worst = l[j]
+        if h[j] > best: best = h[j]
+        if best >= e + dist: stop = max(stop, e)
+        if best - trail > stop and best >= e + dist: stop = best - trail
+    j = min(i0 + tlim, n) - 1
+    return j, c[j] / e - 1 - 2 * ct, 1 - worst / e
+
+
+@numba.njit(cache=True)
 def exit_sim(o, h, l, c, i0, stop, tgt, tlim, ct, cm):
     """15분 인덱스 i0 시가 진입. 반환 (청산 인덱스, 순수익, 최대역행)."""
     e = o[i0]; worst = l[i0]
@@ -46,12 +63,12 @@ def exit_sim(o, h, l, c, i0, stop, tgt, tlim, ct, cm):
     return j, c[j] / e - 1 - 2 * ct, 1 - worst / e
 
 
-def prep(s, inv):
+def prep(s, inv, lo="15min", hi="4h"):
     k = store.load("klines_1m", s).set_index("ts")
-    m = k.resample("15min").agg({"open": "first", "high": "max", "low": "min", "close": "last"}).dropna()
+    m = k.resample(lo).agg({"open": "first", "high": "max", "low": "min", "close": "last"}).dropna()
     if inv:
         m = pd.DataFrame({"open": 1 / m.open, "high": 1 / m.low, "low": 1 / m.high, "close": 1 / m.close}, index=m.index)
-    g = m.resample("4h").agg({"open": "first", "high": "max", "low": "min", "close": "last"}).dropna()
+    g = m.resample(hi).agg({"open": "first", "high": "max", "low": "min", "close": "last"}).dropna()
     tr = pd.concat([g.high - g.low, (g.high - g.close.shift()).abs(), (g.low - g.close.shift()).abs()], axis=1).max(axis=1)
     g["atr"] = tr.rolling(14).mean(); g["ema"] = g.close.ewm(span=50, adjust=False).mean()
     # 15분 → 속한 4시간 봉 번호
@@ -68,7 +85,7 @@ def pivots(g, k):
     return ph, pl
 
 
-def run(m, g, pos, setup, k, tol, Rm):
+def run(m, g, pos, setup, k, tol, Rm, tlim=TLIM):
     o, h, l, c = (m[x].values for x in ("open", "high", "low", "close"))
     G_h, G_l, G_c, atr, ema = g.high.values, g.low.values, g.close.values, g.atr.values, g.ema.values
     ph, pl = pivots(g, k)
@@ -120,63 +137,71 @@ def run(m, g, pos, setup, k, tol, Rm):
             elif setup == "S3" and up and j >= 12:
                 rng_hi = G_h[j - 5:j + 1].max(); rng_lo = G_l[j - 5:j + 1].min()
                 pole = G_c[j - 6] - G_l[j - 11:j - 5].min()
-                if rng_hi - rng_lo <= 1.5 * A and pole >= 3 * A and c[i] > rng_hi:
+                if rng_hi - rng_lo <= 2.0 * A and pole >= 2.0 * A and c[i] > rng_hi:
                     ent = (i + 1, rng_lo - 0.1 * A, A)
             if ent is None: continue
             i0, st, A0 = ent
             e = o[i0]; dist = e - st
             if not (0.15 * A0 <= dist <= 1.5 * A0): continue
-            tg = e + Rm * dist
-            jx, r, mae = exit_sim(o, h, l, c, i0, st, tg, TLIM, CT, CM)
+            if Rm > 0:
+                jx, r, mae = exit_sim(o, h, l, c, i0, st, e + Rm * dist, tlim, CT, CM)
+            else:
+                jx, r, mae = exit_trail(o, h, l, c, i0, st, dist, A0, tlim, CT)
             risk = dist / e + 2 * CT
-            trades.append((m.index[i0], m.index[jx], r, r / risk, risk, mae, up))
+            trades.append((m.index[i0], m.index[jx], r, r / risk, risk, mae, up, A0 / e))
             busy_until = jx
             if setup == "S3": break
-    return pd.DataFrame(trades, columns=["t_in", "t_out", "ret", "R", "risk", "mae", "up"])
+    return pd.DataFrame(trades, columns=["t_in", "t_out", "ret", "R", "risk", "mae", "up", "atrf"])
 
 
-def placebo(m, T, Rm, rng):
+def placebo(m, T, Rm, rng, tlim=TLIM):
     """실제 거래와 같은 달·같은 손절거리 비율, 무작위 15분 진입."""
     o, h, l, c = (m[x].values for x in ("open", "high", "low", "close"))
     out = []
     ix = m.index
     for _, t in T.iterrows():
         mon = ix.searchsorted(t.t_in - pd.Timedelta(days=15)), ix.searchsorted(t.t_in + pd.Timedelta(days=15))
-        i0 = int(rng.integers(mon[0], max(mon[0] + 1, mon[1] - TLIM)))
+        i0 = int(rng.integers(mon[0], max(mon[0] + 1, mon[1] - tlim)))
         e = o[i0]; dist = (t.risk - 2 * CT) * e
-        jx, r, _ = exit_sim(o, h, l, c, i0, e - dist, e + Rm * dist, TLIM, CT, CM)
+        if Rm > 0:
+            jx, r, _ = exit_sim(o, h, l, c, i0, e - dist, e + Rm * dist, tlim, CT, CM)
+        else:
+            jx, r, _ = exit_trail(o, h, l, c, i0, e - dist, dist, t.atrf * e, tlim, CT)
         out.append(r / t.risk)
     return np.mean(out)
 
 
 if __name__ == "__main__":
-    GRID = {"S1": list(itertools.product((2, 3), (0.25, 0.5), (1.5, 2.0, 3.0))),
-            "S2": list(itertools.product((2, 3), (0.25, 0.5), (1.5, 2.0, 3.0))),
-            "S3": list(itertools.product((2, 3), (0.0,), (1.5, 2.0, 3.0)))}
-    P(f"총 구성 {sum(len(v) for v in GRID.values()) * 2 * 2}개 (셋업×파라미터×방향×종목 합산 선택은 셋업·방향별)")
-    D = {(s, inv): prep(s, inv) for s in ("BTCUSDT", "ETHUSDT") for inv in (False, True)}
+    RS = (1.5, 2.0, 3.0, 0.0)                                   # 0 = 추적 손절(이익은 달리게)
+    GRID = {"S1": list(itertools.product((2, 3), (0.25, 0.5), RS)),
+            "S2": list(itertools.product((2, 3), (0.25, 0.5), RS)),
+            "S3": list(itertools.product((2, 3), (0.0,), RS))}
+    TFS = (("15min", "4h", 72 * 4), ("1h", "1D", 24 * 10))
+    P(f"총 구성 {sum(len(v) for v in GRID.values()) * 2 * len(TFS)}개 (셋업×파라미터×방향×시간대), 선택은 셋업·방향·시간대별 학습 최상")
     rng = np.random.default_rng(0)
     allbest = []
-    for setup, grid in GRID.items():
-        for inv in (False, True):
-            side = "숏" if inv else "롱"
-            res = []
-            for p in grid:
-                T = pd.concat([run(*D[(s, inv)], setup, *p).assign(sym=s) for s in ("BTCUSDT", "ETHUSDT")])
-                if len(T) < 30: continue
-                tr = T[T.t_in < SPLIT]
-                res.append((tr.R.mean(), p, T))
-            if not res: continue
-            res.sort(key=lambda z: z[0], reverse=True)
-            isR, p, T = res[0]
-            te = T[T.t_in >= SPLIT]
-            by = T.groupby(T.t_in.dt.year).R.mean()
-            pl = np.mean([np.mean([placebo(D[(s, inv)][0], te[te.sym == s], p[2], rng) for s in ("BTCUSDT", "ETHUSDT")])
-                          for _ in range(5)])
-            nday = len(te) / (3.72 * 365)
-            P(f"\n[{setup} {side}] 학습 최상 k={p[0]} tol={p[1]} R={p[2]}: 학습 {isR:+.3f}R ({(T.t_in<SPLIT).sum()}건)"
-              f" → 평가 {te.R.mean():+.3f}R ({len(te)}건, 하루 {nday:.2f}) 승률 {(te.ret>0).mean():.2f} | 위약 {pl:+.3f}R"
-              f" | 연도별 " + " ".join(f"{y%100}{v:+.2f}" for y, v in by.items()))
-            P("   학습 상위 5 구성의 평가 R: " + " ".join(f"{q[1]}→{q[2][q[2].t_in>=SPLIT].R.mean():+.3f}" for q in res[:5]))
-            allbest.append(T.assign(setup=setup, side=side, par=str(p)))
+    for lo, hi, tl in TFS:
+        D = {(s_, inv): prep(s_, inv, lo, hi) for s_ in ("BTCUSDT", "ETHUSDT") for inv in (False, True)}
+        for setup, grid in GRID.items():
+            for inv in (False, True):
+                side = "숏" if inv else "롱"
+                res = []
+                for p in grid:
+                    T = pd.concat([run(*D[(s_, inv)], setup, *p, tlim=tl).assign(sym=s_) for s_ in ("BTCUSDT", "ETHUSDT")])
+                    if (T.t_in < SPLIT).sum() < 30: continue
+                    res.append((T[T.t_in < SPLIT].R.mean(), p, T))
+                if not res:
+                    P(f"\n[{hi}/{lo} {setup} {side}] 학습 표본 부족"); continue
+                res.sort(key=lambda z: z[0], reverse=True)
+                isR, p, T = res[0]
+                te = T[T.t_in >= SPLIT]
+                by = T.groupby(T.t_in.dt.year).R.mean()
+                pl = np.nanmean([np.nanmean([placebo(D[(s_, inv)][0], te[te.sym == s_], p[2], rng, tl)
+                                             for s_ in ("BTCUSDT", "ETHUSDT") if (te.sym == s_).any()]) for _ in range(5)])
+                P(f"\n[{hi}/{lo} {setup} {side}] 학습 최상 k={p[0]} tol={p[1]} {'추적' if p[2]==0 else f'R={p[2]}'}: "
+                  f"학습 {isR:+.3f}R ({(T.t_in<SPLIT).sum()}건) → 평가 {te.R.mean():+.3f}R ({len(te)}건, 하루 {len(te)/(3.72*365):.2f}) "
+                  f"승률 {(te.ret>0).mean():.2f} 상위1% {te.R.quantile(.99):+.1f}R | 위약 {pl:+.3f}R | 연도별 " +
+                  " ".join(f"{y%100}{v:+.2f}" for y, v in by.items()))
+                P("   학습 상위 5의 평가 R: " + " ".join(f"{q[1]}→{q[2][q[2].t_in>=SPLIT].R.mean():+.3f}" for q in res[:5]))
+                allbest.append(T.assign(setup=setup, side=side, par=str(p), tf=hi))
     pd.concat(allbest).to_parquet(R / "data" / "r45_trades.parquet")
