@@ -64,7 +64,7 @@ def option_buckets(cur):
     F["datm1"] = F.atm - F.atm.shift(4); F["datm4"] = F.atm - F.atm.shift(16)
     F["rrz"] = (F.rr25 - F.rr25.rolling(96 * 30, min_periods=96 * 5).mean()) / F.rr25.rolling(96 * 30, min_periods=96 * 5).std()
     # 버킷 b 의 값은 [b, b+15분) 체결 포함 → b+15분부터 사용 가능
-    F.index = F.index + pd.Timedelta(minutes=15)
+    F.index = pd.to_datetime(F.index, utc=True).astype("datetime64[ns, UTC]") + pd.Timedelta(minutes=15)
     return F.replace([np.inf, -np.inf], np.nan).ffill(limit=8)
 
 
@@ -73,6 +73,7 @@ if __name__ == "__main__":
     out = []
     for s, (cur, cb) in MAP.items():
         g = L[L.sym == s].copy()
+        g["ts"] = pd.to_datetime(g.ts, utc=True).astype("datetime64[ns, UTC]")
         F = option_buckets(cur)
         # 격자 t(분 시작)에서 쓸 수 있는 최신 값: 인덱스 ≤ t 인 버킷 (버킷 끝 시각 기준이므로 인과적)
         if F is not None:
@@ -85,7 +86,7 @@ if __name__ == "__main__":
             X = pd.DataFrame({"cbp": prem, "cbp15": prem.rolling(15).mean(), "cbp60": prem.rolling(60).mean()})
             X["dcbp60"] = X.cbp60 - X.cbp60.shift(60)
             X["cbpz"] = (X.cbp60 - prem.rolling(10080).mean()) / prem.rolling(10080).std()
-            X.index = X.index + pd.Timedelta(minutes=1)       # 분 봉 끝난 뒤 사용
+            X.index = pd.to_datetime(X.index, utc=True).astype("datetime64[ns, UTC]") + pd.Timedelta(minutes=1)   # 분 봉 끝난 뒤 사용
             g = pd.merge_asof(g.sort_values("ts"), X.rename_axis("ts").reset_index(), on="ts", direction="backward")
         out.append(g)
         P(f"{s} D 특징 완료: 옵션 커버 {g.rr25.notna().mean() if 'rr25' in g else 0:.2f}" + (f", 코인베이스 {g.cbp.notna().mean():.2f}" if "cbp" in g else ""))
