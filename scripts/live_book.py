@@ -10,7 +10,7 @@
 저장: data/parquet/live_book/<SYM>/<YYYY-MM-DD>.parquet (정시마다 그날 파일에 합침)
 운영: cron 5분마다 flock으로 단일 실행 보장. 끊기면 자동 재접속.
 사용: python scripts/live_book.py"""
-import asyncio, json, sys, time
+import asyncio, json, signal, sys, time
 from pathlib import Path
 import pandas as pd
 import websockets
@@ -77,12 +77,12 @@ async def reader():
     while True:
         try:
             async with websockets.connect(URL, ping_interval=20, max_size=2**22) as ws:
-                print(f"{pd.Timestamp.utcnow()} 접속", flush=True)
+                print(f"{pd.Timestamp.now('UTC')} 접속", flush=True)
                 async for msg in ws:
                     m = json.loads(msg); stream = m["stream"]; s = stream.split("@")[0]
                     (on_ticker if "bookTicker" in stream else on_depth)(s, m["data"])
         except Exception as e:
-            print(f"{pd.Timestamp.utcnow()} 끊김: {e!r} → 5초 후 재접속", flush=True)
+            print(f"{pd.Timestamp.now('UTC')} 끊김: {e!r} → 5초 후 재접속", flush=True)
             for s in SYMS: st[s]["bid"] = None          # 끊긴 구간의 OFI 연결 방지
             await asyncio.sleep(5)
 
@@ -91,8 +91,15 @@ async def main():
     await asyncio.gather(reader(), sampler())
 
 
+def _term(*_):
+    raise KeyboardInterrupt
+
+
 if __name__ == "__main__":
+    signal.signal(signal.SIGTERM, _term)
     try:
         asyncio.run(main())
+    except KeyboardInterrupt:
+        pass
     finally:
         flush(force=True)
