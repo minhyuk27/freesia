@@ -21,6 +21,7 @@ P = lambda *a: print(" ".join(str(x) for x in a), flush=True)
 E = pd.read_parquet(R / "data" / "r27_events.parquet")
 E["ts"] = pd.DatetimeIndex(E.ts); E["yr"] = E.ts.dt.year
 E["isbtc"] = (E.sym == "BTCUSDT").astype(float)
+E = E.replace([np.inf, -np.inf], np.nan)
 META = {"sym", "f", "x", "ret", "mae", "ts", "yr"}
 FEAT = [c for c in E.columns if c not in META]
 DERIV = ["prem", "premz", "oi60", "oi1440", "tlsr", "lsr", "fund"]

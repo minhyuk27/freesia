@@ -18,7 +18,7 @@ P = lambda *a: print(" ".join(str(x) for x in a), flush=True)
 SYM = ("BTCUSDT", "ETHUSDT")
 BARS = (5, 10, 15, 30, 60)
 KS = (3.0, 4.0, 5.0, 6.0, 8.0)
-EPS_BP = float(sys.argv[1]) if len(sys.argv) > 1 else 2.0
+EPS_BP = float(sys.argv[1]) if len(sys.argv) > 1 and __name__ == "__main__" else 2.0
 SUF = "" if EPS_BP == 2.0 else f"_e{EPS_BP:g}"
 
 
@@ -68,25 +68,26 @@ def feats(s):
     return dict(o=o, h=h, l=l, c=c, rv1=rv1, idx=idx), F
 
 
-rows = []
-for s in SYM:
-    d, F = feats(s)
-    P(f"{s} 특징 {len(F)}개 준비")
-    for B in BARS:
-        for kx in KS:
-            a, b, r, m = run(d["o"], d["h"], d["l"], d["c"], d["rv1"], B, 1, kx, 0, 1.0, 0, EPS_BP / 1e4, FM, FT)
-            if len(a) == 0: continue
-            fm1 = a - 1
-            df = pd.DataFrame({"sym": s, "B": B, "k": kx, "f": a, "x": b, "ret": r, "mae": m,
-                               "ts": d["idx"][a], "el": (a % B) / B,
-                               "pre": (d["c"][fm1] / d["o"][(a // B) * B] - 1) / (kx * d["rv1"][(a // B) * B] * np.sqrt(B))})
-            for kk, v in F.items():
-                df[kk] = v[fm1]
-            rows.append(df)
-            P(f"  {s} B{B} k{kx}: {len(df)}")
-E = pd.concat(rows, ignore_index=True)
-for c_ in E.columns:
-    if E[c_].dtype == np.float64: E[c_] = E[c_].astype(np.float32)
-out = R / "data" / f"r27_events{SUF}.parquet"
-E.to_parquet(out, index=False)
-P(f"저장 {out} {E.shape}")
+if __name__ == "__main__":
+    rows = []
+    for s in SYM:
+        d, F = feats(s)
+        P(f"{s} 특징 {len(F)}개 준비")
+        for B in BARS:
+            for kx in KS:
+                a, b, r, m = run(d["o"], d["h"], d["l"], d["c"], d["rv1"], B, 1, kx, 0, 1.0, 0, EPS_BP / 1e4, FM, FT)
+                if len(a) == 0: continue
+                fm1 = a - 1
+                df = pd.DataFrame({"sym": s, "B": B, "k": kx, "f": a, "x": b, "ret": r, "mae": m,
+                                   "ts": d["idx"][a], "el": (a % B) / B,
+                                   "pre": (d["c"][fm1] / d["o"][(a // B) * B] - 1) / (kx * d["rv1"][(a // B) * B] * np.sqrt(B))})
+                for kk, v in F.items():
+                    df[kk] = v[fm1]
+                rows.append(df)
+                P(f"  {s} B{B} k{kx}: {len(df)}")
+    E = pd.concat(rows, ignore_index=True)
+    for c_ in E.columns:
+        if E[c_].dtype == np.float64: E[c_] = E[c_].astype(np.float32)
+    out = R / "data" / f"r27_events{SUF}.parquet"
+    E.to_parquet(out, index=False)
+    P(f"저장 {out} {E.shape}")
