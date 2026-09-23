@@ -77,7 +77,8 @@ if __name__ == "__main__":
         F = option_buckets(cur)
         # 격자 t(분 시작)에서 쓸 수 있는 최신 값: 인덱스 ≤ t 인 버킷 (버킷 끝 시각 기준이므로 인과적)
         if F is not None:
-            g = pd.merge_asof(g.sort_values("ts"), F.rename_axis("ts").reset_index(), on="ts", direction="backward")
+            g = pd.merge_asof(g.sort_values("ts"), F.rename_axis("ts").reset_index(), on="ts", direction="backward",
+                              tolerance=pd.Timedelta("2h"))          # 수집 끝난 뒤 옛 값이 이어지지 않게
         cbk = store.load("coinbase_1m", cb)
         if cbk is not None:
             bn = store.load("klines_1m", s).set_index("ts").close
@@ -87,7 +88,8 @@ if __name__ == "__main__":
             X["dcbp60"] = X.cbp60 - X.cbp60.shift(60)
             X["cbpz"] = (X.cbp60 - prem.rolling(10080).mean()) / prem.rolling(10080).std()
             X.index = pd.to_datetime(X.index, utc=True).astype("datetime64[ns, UTC]") + pd.Timedelta(minutes=1)   # 분 봉 끝난 뒤 사용
-            g = pd.merge_asof(g.sort_values("ts"), X.rename_axis("ts").reset_index(), on="ts", direction="backward")
+            g = pd.merge_asof(g.sort_values("ts"), X.rename_axis("ts").reset_index(), on="ts", direction="backward",
+                              tolerance=pd.Timedelta("10min"))
         out.append(g)
         P(f"{s} D 특징 완료: 옵션 커버 {g.rr25.notna().mean() if 'rr25' in g else 0:.2f}" + (f", 코인베이스 {g.cbp.notna().mean():.2f}" if "cbp" in g else ""))
     O = pd.concat(out, ignore_index=True).drop(columns=["ts"])
