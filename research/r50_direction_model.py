@@ -64,23 +64,24 @@ def select(W, q):
     return sel.loc[keep]
 
 
-for y, d in (("y10", 0.01), ("y15", 0.015)):
-    P(f"\n===== ±{d*100:.1f}% / 12시간")
-    W = walk(y)
-    Ws = walk(y, shuffle=True)
-    wk = (W.ts.max() - W.ts.min()).days / 7
-    for q in (0.01, 0.003, 0.001):
-        for lab, WW in (("실제", W), ("셔플 위약", Ws)):
-            S = select(WW, q)
-            dec = S[S[y] != 0]
-            acc = (dec[y] == dec.side).mean() if len(dec) else np.nan
-            by = dec.groupby("yr").apply(lambda g: (g[y] == g.side).mean())
-            P(f"  q={q*100:.1f}% {lab:5s}: 주 {len(S)/wk:4.1f}회 적중(결판) {acc:.3f} 무승부 {(S[y]==0).mean():.2f} 롱비중 {(S.side>0).mean():.2f} | " +
-              " ".join(f"{yy%100}:{v:.2f}" for yy, v in by.items()))
-            if lab == "실제":
-                ent = S[["ts", "sym", "side"]].copy()
-                eq, T = simulate_entries(ent, d, 720)
-                cg, mo, mmed, mdd, fin = stat(eq)
-                P(f"      → 30배 구조 계좌: 월 복리 {mo*100:+.1f}% 월중앙 {mmed*100:+.1f}% MDD {mdd*100:.0f}% 최종 {fin:.3g}배 "
-                  f"(익절 {(T.kind==1).mean():.2f} 손절 {(T.kind==-1).mean():.2f} 시간 {(T.kind==0).mean():.2f})")
-    W.to_parquet(R / "data" / f"r50_wf_{y}.parquet", index=False)
+if __name__ == "__main__":
+    for y, d in (("y10", 0.01), ("y15", 0.015)):
+        P(f"\n===== ±{d*100:.1f}% / 12시간")
+        W = walk(y)
+        Ws = walk(y, shuffle=True)
+        wk = (W.ts.max() - W.ts.min()).days / 7
+        for q in (0.01, 0.003, 0.001):
+            for lab, WW in (("실제", W), ("셔플 위약", Ws)):
+                S = select(WW, q)
+                dec = S[S[y] != 0]
+                acc = (dec[y] == dec.side).mean() if len(dec) else np.nan
+                by = dec.groupby("yr").apply(lambda g: (g[y] == g.side).mean())
+                P(f"  q={q*100:.1f}% {lab:5s}: 주 {len(S)/wk:4.1f}회 적중(결판) {acc:.3f} 무승부 {(S[y]==0).mean():.2f} 롱비중 {(S.side>0).mean():.2f} | " +
+                  " ".join(f"{yy%100}:{v:.2f}" for yy, v in by.items()))
+                if lab == "실제":
+                    ent = S[["ts", "sym", "side"]].copy()
+                    eq, T = simulate_entries(ent, d, 720)
+                    cg, mo, mmed, mdd, fin = stat(eq)
+                    P(f"      → 30배 구조 계좌: 월 복리 {mo*100:+.1f}% 월중앙 {mmed*100:+.1f}% MDD {mdd*100:.0f}% 최종 {fin:.3g}배 "
+                      f"(익절 {(T.kind==1).mean():.2f} 손절 {(T.kind==-1).mean():.2f} 시간 {(T.kind==0).mean():.2f})")
+        W.to_parquet(R / "data" / f"r50_wf_{y}.parquet", index=False)
