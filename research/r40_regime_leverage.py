@@ -82,14 +82,15 @@ def show(lab, w, N, mult, eqmom=False):
 V1 = {a: np.clip(W.vreg.values ** a, 0.3, 4.0) for a in (1.0, 2.0, 3.0)}
 V2 = np.clip(W.pred.values / 0.001, 0.5, 3.0)
 ONE = np.ones(len(W))
-P(f"거래 {len(W)/YRS:.0f}/년, 거래당 {W.ret.mean()*1e4:+.2f}bp (청산지연 1.2bp 반영), vreg 분포 " +
-  " ".join(f"{q:.0%}:{W.vreg.quantile(q):.2f}" for q in (.1, .5, .9)))
-for w, N in ((0.5, 3), (1, 3), (1, 5), (2, 8), (3, 12)):
-    P(f"\n── w{w} N{N}")
-    show("V0 기본", w, N, ONE)
-    for a in (1.0, 2.0, 3.0):
-        show(f"V1 변동성국면 α{a:.0f}", w, N, V1[a])
-    show("V2 예측비례", w, N, V2)
-    show("V3 변동성α2 × 예측", w, N, np.minimum(V1[2.0] * V2, 6.0))
-    show("V4 자기성과 모멘텀", w, N, ONE, eqmom=True)
-    show("V3 + V4", w, N, np.minimum(V1[2.0] * V2, 6.0), eqmom=True)
+if __name__ == "__main__":
+    P(f"거래 {len(W)/YRS:.0f}/년, 거래당 {W.ret.mean()*1e4:+.2f}bp (청산지연 1.2bp 반영), vreg 분포 " +
+      " ".join(f"{q:.0%}:{W.vreg.quantile(q):.2f}" for q in (.1, .5, .9)))
+    for w, N in ((0.5, 3), (1, 3), (1, 5), (2, 8), (3, 12)):
+        P(f"\n── w{w} N{N}")
+        show("V0 기본", w, N, ONE)
+        for a in (1.0, 2.0, 3.0):
+            show(f"V1 변동성국면 α{a:.0f}", w, N, V1[a])
+        show("V2 예측비례", w, N, V2)
+        show("V3 변동성α2 × 예측", w, N, np.minimum(V1[2.0] * V2, 6.0))
+        show("V4 자기성과 모멘텀", w, N, ONE, eqmom=True)
+        show("V3 + V4", w, N, np.minimum(V1[2.0] * V2, 6.0), eqmom=True)
