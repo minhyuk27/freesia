@@ -122,7 +122,7 @@ def run_lines(Ls, h, l, c, placebo, rng, B_atr):
         for x in buf[:e]:
             j, res, m, nb, pen = int(x[0]), int(x[1]), int(x[2]), int(x[3]), x[4]
             fw = [(c[m] - c[min(m + f, len(c) - 1)]) if (res == -1 and m + f < len(c)) else np.nan for f in FWD]
-            rec.append((j, res, m, nb + n0, pen, *fw, i0, ia, s / (d / DLT)))
+            rec.append((j, res, m, nb + n0, pen, *fw, i0, ia, s / (d / DLT), a + s * (j - ia), d))
     return rec, kept
 
 
@@ -139,7 +139,8 @@ if __name__ == "__main__":
                     for plc in (False, True):
                         r, kept = run_lines(Ls, h, l, c, plc, rng, BB)
                         if not plc: Ls = kept                    # 위약은 중복 제거 후 남은 실제 선에서만
-                        df = pd.DataFrame(r, columns=["j", "res", "m", "nprev", "pen", "f4", "f12", "f48", "i0", "ia", "slope"])
+                        df = pd.DataFrame(r, columns=["j", "res", "m", "nprev", "pen", "f4", "f12", "f48", "i0", "ia", "slope", "L", "d"])
+                        df["lvl"] = sg * df.L                    # 접근봉의 선 가격(로그, 실제 부호)
                         df["t"] = ix[df.j.values]; df["tm"] = ix[df.m.values]; df["atr"] = atr[df.j.values]
                         df = df.assign(tf=tf, sym=sym, side=side, kind=kind, plc=plc)
                         allr.append(df)
