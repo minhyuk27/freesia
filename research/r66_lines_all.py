@@ -30,6 +30,8 @@ def scan_series(Ls, h, l, c, dl, B):
         L = Ls[j]
         if np.isnan(L) or np.isnan(dl[j]):
             armed = False; j += 1; continue
+        if np.isnan(Ls[j - 1]) or abs(L - Ls[j - 1]) > dl[j]:     # 선이 점프하면(새 피벗·기간 교체) 다시 무장해야 한다
+            armed = l[j] > L + dl[j]; j += 1; continue
         if not armed:
             if l[j] > L + dl[j]: armed = True
             j += 1; continue
@@ -49,24 +51,27 @@ def scan_series(Ls, h, l, c, dl, B):
 
 
 @numba.njit(cache=True)
-def sim(t0, wait, hold, ori, ye, ys, yt, se, lh, ll, lc):
-    """방향 맞춘 로그가격 롱 엔진. 반환 (체결, 총수익, 순수익)."""
+def sim(t0, wait, hold, ori, ye, ys, yt, se, lo, lh, ll, lc):
+    """방향 맞춘 로그가격 롱 엔진. 반환 (체결, 총수익, 순수익).
+    스톱 진입·손절은 시가가 이미 넘어섰으면 시가 체결(불리), 지정가 진입·목표는 지정가 그대로(보수)."""
     n = len(lc); out = np.full((len(t0), 3), np.nan)
     for e in range(len(t0)):
-        s = ori[e]; fill = -1
+        s = ori[e]; fill = -1; px = ye[e]
         for i in range(t0[e], min(n, t0[e] + wait[e])):
-            hi_ = lh[i] if s == 1 else -ll[i]; lo_ = ll[i] if s == 1 else -lh[i]
+            hi_ = lh[i] if s == 1 else -ll[i]; lo_ = ll[i] if s == 1 else -lh[i]; op = lo[i] * s
             if se:
-                if hi_ >= ye[e]: fill = i; break
+                if hi_ >= ye[e]: fill = i; px = max(ye[e], op); break
             elif lo_ <= ye[e] - PEN: fill = i; break
         if fill < 0: out[e, 0] = 0; continue
         g = np.nan; cx = CT; j = fill
         while j < min(n, fill + hold[e]):
-            hi_ = lh[j] if s == 1 else -ll[j]; lo_ = ll[j] if s == 1 else -lh[j]
-            if lo_ <= ys[e]: g = ys[e] - ye[e]; cx = CT; break
-            if j > fill and hi_ >= yt[e]: g = yt[e] - ye[e]; cx = CM; break
+            hi_ = lh[j] if s == 1 else -ll[j]; lo_ = ll[j] if s == 1 else -lh[j]; op = lo[j] * s
+            if lo_ <= ys[e]:
+                ex = ys[e] if (j == fill or op > ys[e]) else op
+                g = ex - px; cx = CT; break
+            if j > fill and hi_ >= yt[e]: g = yt[e] - px; cx = CM; break
             j += 1
-        if np.isnan(g): g = lc[min(j, n - 1)] * s - ye[e]; cx = CT
+        if np.isnan(g): g = lc[min(j, n - 1)] * s - px; cx = CT
         out[e, 0] = 1; out[e, 1] = g; out[e, 2] = g - cx - (CT if se else CM)
     return out
 
@@ -79,7 +84,7 @@ def run_series(name, Lp, g, base, rng, step):
     day = g.index.floor("D"); ud = pd.Series(rng.uniform(0.5, 1.5, len(day.unique())) * rng.choice([-1, 1], len(day.unique())),
                                              index=day.unique())
     Lpl = L + ud.reindex(day).values * atr
-    blh, bll, blc = np.log(base.h.values), np.log(base.l.values), np.log(base.c.values)
+    blo, blh, bll, blc = np.log(base.o.values), np.log(base.h.values), np.log(base.l.values), np.log(base.c.values)
     t0_all = base.index.searchsorted(g.index)
     rows = []
     for plc, LL in ((False, L), (True, Lpl)):
@@ -90,9 +95,9 @@ def run_series(name, Lp, g, base, rng, step):
             j = ev[:, 0].astype(int); res = ev[:, 1]; yL = ev[:, 3]; A = atr[j]; d = dl[j]
             t0 = t0_all[j]; wait = np.full(len(j), step); hold = 12 * wait
             for rule in ("E1", "E3", "E2"):
-                if rule == "E1": o = sim(t0, wait, hold, np.full(len(j), ori), yL, yL - 0.5 * A, yL + 0.5 * A, False, blh, bll, blc)
-                elif rule == "E3": o = sim(t0, wait, hold, np.full(len(j), ori), yL - 0.5 * A, yL - 1.25 * A, yL, False, blh, bll, blc)
-                else: o = sim(t0, wait, hold, np.full(len(j), -ori), -yL + d, -yL - 0.25 * A, -yL + A, True, blh, bll, blc)
+                if rule == "E1": o = sim(t0, wait, hold, np.full(len(j), ori), yL, yL - 0.5 * A, yL + 0.5 * A, False, blo, blh, bll, blc)
+                elif rule == "E3": o = sim(t0, wait, hold, np.full(len(j), ori), yL - 0.5 * A, yL - 1.25 * A, yL, False, blo, blh, bll, blc)
+                else: o = sim(t0, wait, hold, np.full(len(j), -ori), -yL + d, -yL - 0.25 * A, -yL + A, True, blo, blh, bll, blc)
                 f = o[:, 0] == 1; t = g.index[j[f]]; gg = o[f, 1]; nn = o[f, 2]
                 row = {"s": name, "plc": plc, "rule": rule, "cnt": f.sum(), "sg": gg.sum(), "sg2": (gg * gg).sum(), "sn": nn.sum()}
                 for i_, (_, a, z) in enumerate(PER):
