@@ -21,7 +21,7 @@ NSPLIT, NTR, TOPK, MINN = 20, 16, 20, 150
 
 def load():
     A = pd.concat([pd.read_parquet(R / "data" / f"r67_trades_{tf}.parquet") for tf in ("15min", "1h", "4h")], ignore_index=True)
-    A["tf"] = A.tf.astype("category")
+    for c in ("tf", "s", "rule", "sym"): A[c] = A[c].astype("category")
     t = A.t.dt.tz_convert("UTC")
     A["q"] = (t.dt.year * 4 + (t.dt.month - 1) // 3).astype(np.int32)
     qend = (t.dt.to_period("Q").dt.end_time.dt.tz_localize("UTC"))
