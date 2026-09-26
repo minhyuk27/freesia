@@ -183,7 +183,7 @@ if __name__ == "__main__":
     D = pd.read_parquet(R / "data" / "r77_feat.parquet").sort_values("t").reset_index(drop=True)
     FE = [c for c in D.columns if "|" in c]; GR = sorted({c.split("|")[0] for c in FE})
     X = D[FE].values.astype(np.float32); t = D.t.values
-    days = pd.date_range("2022-01-01", D.t.max().floor("D"), freq="D", tz="UTC")
+    days = pd.date_range("2022-01-01", D.t.max().tz_convert("UTC").floor("D").tz_localize(None), freq="D", tz="UTC")
     idx = {c: j for j, c in enumerate(FE)}; allf = list(range(len(FE)))
     jobs = []
     if mode == "main":
