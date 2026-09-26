@@ -16,7 +16,7 @@ R72(91개 지표 × 180표본)는 과적합. 여기서는 5~6개짜리 지표 �
   CW 상관가중: 각 지표의 창 안 상관 ρ_j, |ρ_j|√n ≥ 1 인 지표만 점수 = Σ ρ_j z_j
 신호: 현재 점수가 창 안 점수의 상위 q 이상 롱, 하위 q 이하 숏. q = 20%(충분) / 10%(엄격).
 매 4시간 봉 i마다 종목별로 학습 = 봉 [i−h−179, i−h]. 목표 h = 1(4시간), 6(24시간). 비용 왕복 14bp. 위약 = 미래수익 시간 이동.
-사용: python research/r73_short_window_sets.py"""
+사용: python research/r73_short_window_sets.py [--fw-only]  (거래 기록 data/r73_trades_*.parquet 저장)"""
 import sys, warnings, time
 from pathlib import Path
 from multiprocessing import Pool
@@ -109,13 +109,16 @@ if __name__ == "__main__":
         SETS = {**S, "S8": ALL91, "S1+S2": S["S1"] + S["S2"], "S3+S4": S["S3"] + S["S4"], "S1+S6": S["S1"] + S["S6"],
                 "S2+S3": S["S2"] + S["S3"], "소형전체": sum((S[f"S{k}"] for k in range(1, 8)), []), "ALL91": ALL91}
         SETS = {k: [ix[c] for c in v] for k, v in SETS.items()}
-        for ycol, H in (("f1", 1), ("fW", 6)):
+        for ycol, H in ((("fW", 6),) if "--fw-only" in sys.argv else (("f1", 1), ("fW", 6))):
             for plc in (False, True): jobs.append((s, ycol, H, plc, X, SETS, D[ycol].values, D.t.values))
     P(f"작업 {len(jobs)}개, 묶음 {len(SETS)}개: " + " ".join(f"{k}({len(v)})" for k, v in SETS.items()) + f" ({time.time()-t_:.0f}s)")
     res = {}
     with Pool(2) as pool:
         for ycol, plc, df in pool.imap_unordered(job, jobs):
             res.setdefault((ycol, plc), []).append(df); P(f"  완료 {ycol} {'위약' if plc else '실제'} 신호 {len(df):,} ({time.time()-t_:.0f}s)")
+    for (yc, pl), dfs in res.items():
+        pd.concat(dfs).to_parquet(R / "data" / f"r73_trades_{yc}_{'plc' if pl else 'real'}.parquet", index=False)
+    if "--fw-only" in sys.argv: sys.exit(0)
     NAME = {"S1": "모멘텀", "S2": "평균회귀", "S3": "캔들", "S4": "거래량·체결", "S5": "파생", "S6": "교차", "S7": "변동성·국면", "S8": "압축(PCA5)"}
     rows = []
     for ycol, H, tname in (("f1", 1, "다음 4시간"), ("fW", 6, "다음 24시간")):
