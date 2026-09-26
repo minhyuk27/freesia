@@ -118,7 +118,7 @@ def fit_predict(args):
     from sklearn.linear_model import LogisticRegression
     tag, win, wt, model, feats, target, X, y, t, days, retrain = args
     out = []
-    ts = pd.DatetimeIndex(t); tv = ts.values
+    ts = pd.DatetimeIndex(t); ts = ts.tz_localize("UTC") if ts.tz is None else ts
     for T in days:
         if retrain == "W" and T.weekday() != 0: continue
         if retrain == "M" and T.day != 1: continue
