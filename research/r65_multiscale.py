@@ -93,7 +93,7 @@ def lines_H(pl, l, atr, n):
     m = len(pl); L = np.zeros((m, 7)); c = 0
     for p in pl:
         i0 = p + K
-        if i0 >= n: continue
+        if i0 >= n or not atr[p] > 0: continue
         L[c, 0] = i0; L[c, 1] = min(n, i0 + AGE); L[c, 2] = p; L[c, 3] = l[p]; L[c, 4] = 0.0; L[c, 5] = DLT * atr[p]; L[c, 6] = 1
         c += 1
     return L[:c]
@@ -104,7 +104,7 @@ def lines_T(pl, l, atr, n):
     m = len(pl); L = np.zeros((m, 7)); c = 0
     for q in range(m):
         p2 = pl[q]; i0 = p2 + K
-        if i0 >= n: continue
+        if i0 >= n or not atr[p2] > 0: continue
         best = -1; bs = 0.0
         for r in range(q - 1, -1, -1):
             p1 = pl[r]
