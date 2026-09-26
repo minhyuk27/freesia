@@ -1,4 +1,4 @@
-"""bookDepth(±1~5% 호가 잔량) 수집. data.binance.vision 일별, 체크섬 검증.
+"""bookDepth(±0.2%·±1~5% 호가 잔량) 수집. data.binance.vision 일별, 체크섬 검증.
 사용: python scripts/get_bookdepth.py [시작YYYY-MM-DD] [종료YYYY-MM-DD]"""
 import sys, io, zipfile, hashlib, time
 from pathlib import Path
@@ -37,11 +37,11 @@ def fetch_day(sym, day):
     # 넓은 형식으로: 각 시점별 ±1~5% 잔량
     df = df.drop_duplicates(subset=["ts", "percentage"], keep="last")
     w = df.pivot(index="ts", columns="percentage", values="notional")
-    w.columns = [f"n{int(c):+d}" for c in w.columns]
+    # ±0.2%는 정수로 바꾸면 둘 다 0이 되어 매도 쪽이 버려졌다(2026-09-26 수정) → n-0.2 / n+0.2
+    w.columns = [f"n{float(c):+g}" for c in w.columns]
     d2 = df.pivot(index="ts", columns="percentage", values="depth")
-    d2.columns = [f"d{int(c):+d}" for c in d2.columns]
+    d2.columns = [f"d{float(c):+g}" for c in d2.columns]
     out = pd.concat([w, d2], axis=1).reset_index()
-    out = out.loc[:, ~out.columns.duplicated()]
     return out
 
 
