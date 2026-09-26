@@ -46,6 +46,7 @@ def scan(i0, iend, ia, a, s, d, B, h, l, c, TO, out):
                 if c[m] < Lm - d: res = -1; break
                 if m > j and h[m] > Lm + B: res = 1; break
                 m += 1
+            m = min(m, n - 1)
             if e < out.shape[0]:
                 out[e, 0] = j; out[e, 1] = res; out[e, 2] = m; out[e, 3] = nb; out[e, 4] = pen; e += 1
             if res == -1: return e, m
