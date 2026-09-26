@@ -34,7 +34,7 @@ def job(args):
         z = (F - mu) / sd; zi = ((xi - mu) / sd)[None]
         p1 = LogisticRegression(C=0.1, max_iter=300).fit(z, ytr).predict_proba(zi)[0, 1]
         p2 = HistGradientBoostingClassifier(max_iter=50, max_depth=3, min_samples_leaf=10, learning_rate=0.1,
-                                            random_state=0).fit(Xtr, ytr).predict_proba(X[i][None])[0, 1]
+                                            random_state=0).fit(F, ytr).predict_proba(xi[None])[0, 1]
         p3 = ExtraTreesClassifier(n_estimators=50, min_samples_leaf=5, random_state=0, n_jobs=1).fit(F, ytr).predict_proba(xi[None])[0, 1]
         C = XC[a:b]; mc = np.nanmedian(C, 0); mc = np.where(np.isnan(mc), 0, mc); Cf = np.where(np.isnan(C), mc, C)
         cm, cs = Cf.mean(0), Cf.std(0); cs[cs == 0] = 1; ci = np.where(np.isnan(XC[i]), mc, XC[i])
