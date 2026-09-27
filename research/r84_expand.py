@@ -94,5 +94,64 @@ def evaluate():
     (R / "logs" / "r84.summary").write_text("R84 z0.31 격자 확장 완료. 세부 logs/r84.log\n")
 
 
+def walk2():
+    """모델 분리: 기존 격자 = R83 예측 그대로, 신규 격자 = 그룹별 별도 모델(짧은 봉 1~3 / 긴 봉 120~240 / 기존 봉의 새 깊이)."""
+    from sklearn.ensemble import HistGradientBoostingRegressor
+    E = pd.read_parquet(EV); E["ts"] = pd.DatetimeIndex(E.ts); E["yr"] = E.ts.dt.year; E["isbtc"] = (E.sym == "BTCUSDT").astype(np.float32)
+    feats = [c for c in E.columns if c not in {"sym", "f", "x", "ret", "mae", "ts", "yr"}]
+    old = E.B.isin(OLD_B) & E.k.isin(OLD_K)
+    groups = {"짧은봉(1~3)": E.B <= 3, "긴봉(120~240)": E.B >= 120, "기존봉·새깊이": E.B.isin(OLD_B) & ~E.k.isin(OLD_K)}
+    out = []
+    O = pd.read_parquet(R / "data" / "r83_wf_live.parquet")[["sym", "B", "k", "f", "x", "ret", "mae", "ts", "yr", "pred"]]
+    out.append(O.assign(grp="기존격자"))
+    for g, mk in groups.items():
+        G = E[mk]
+        for Y in range(2022, 2027):
+            tr = G[G.yr < Y]; te = G[G.yr == Y]
+            if len(tr) > 2_000_000: tr = tr.sample(2_000_000, random_state=0)
+            fu = [c for c in feats if tr[c].notna().sum() > 1000]
+            m = HistGradientBoostingRegressor(max_iter=300, learning_rate=0.04, max_leaf_nodes=15, min_samples_leaf=400, l2_regularization=1.0,
+                                              random_state=0).fit(tr[fu].values, np.clip(tr.ret.values, -0.02, 0.02))
+            out.append(te[["sym", "B", "k", "f", "x", "ret", "mae", "ts", "yr"]].assign(pred=m.predict(te[fu].values).astype(np.float32), grp=g))
+        P(f"  {g} 완료 ({len(G):,} 이벤트)")
+    A = pd.concat(out, ignore_index=True); A["ts"] = pd.to_datetime(A.ts, utc=True)
+    A.to_parquet(R / "data" / "r84_wf2.parquet", index=False)
+
+
+def evaluate2():
+    import r40_regime_leverage as RL, r80_max_return as R80
+    from freesia import store
+    RL.MMR = 0.0065
+    W = pd.read_parquet(R / "data" / "r84_wf2.parquet"); W["ts"] = pd.DatetimeIndex(W.ts); W["ret"] = W.ret - 1.2e-4
+    for s in ("BTCUSDT", "ETHUSDT"):
+        k = store.load("klines_1m", s).set_index("ts").close.resample("D").last(); r = np.log(k).diff()
+        v30 = r.rolling(30).std(); reg = (v30 / v30.rolling(365, min_periods=120).median()).shift(1)
+        m = W.sym == s; W.loc[m, "vreg"] = reg.reindex(W.loc[m, "ts"].dt.normalize()).values
+    W["vreg"] = W.vreg.fillna(1.0)
+
+    def run(S, tag):
+        S = S.sort_values(["f", "sym"]).reset_index(drop=True)
+        if len(S) < 50: P(f"  {tag}: 표본 부족 {len(S)}"); return
+        mult = np.minimum(np.clip(S.vreg.values ** 1.5, 0.3, 4.0) * np.clip(S.pred.values / 0.001, 0.5, 3.0), 6.0)
+        base = RL.sim(S, 1, 4, mult, X=0.03, H=720); sh = np.nan
+        if base is not None: d = R80.daily_from_eq(base[0]); sh = d.mean() / d.std() * np.sqrt(365)
+        best = None
+        for w in (1, 1.5, 2, 2.5, 3, 3.5, 4):
+            res = RL.sim(S, w, 4 * w, mult, X=0.03, H=720)
+            if res is None: break
+            d = R80.daily_from_eq(res[0]); m_ = R80.metrics(d); mt = R80.metrics(d, "2024-01-01", "2027-01-01")
+            if best is None or m_["mo"] > best[1]["mo"]: best = (w, m_, mt)
+        line = f"  {tag:34s}: 거래 {len(S)/4.75:6.0f}/년 거래당 {S.ret.mean()*1e4:+6.2f}bp 승률 {(S.ret>0).mean():.3f} | 샤프(w1N4) {sh:.2f}"
+        if best: line += f" | 최대 w{best[0]}N{4*best[0]:g}: 월 {best[1]['mo']:+.1f}% (중앙 {best[1]['med']:+.1f}%) MDD {best[1]['mdd']:.0f}% 월≥100% {best[1]['big']} | 24~26 월 {best[2]['mo']:+.1f}% MDD {best[2]['mdd']:.0f}%"
+        P(line)
+    P("\n===== 모델 분리 평가 (예측 > 문턱)")
+    for th in (0.0015, 0.0025, 0.0035):
+        for g in ("기존격자", "짧은봉(1~3)", "긴봉(120~240)", "기존봉·새깊이"):
+            run(W[(W.grp == g) & (W.pred > th)], f"문턱{th*1e4:.0f} {g}")
+        run(W[W.pred > th], f"문턱{th*1e4:.0f} 전체 합집합")
+        run(W[(W.grp != "짧은봉(1~3)") & (W.pred > th)], f"문턱{th*1e4:.0f} 기존+긴봉+새깊이")
+    (R / "logs" / "r84b.summary").write_text("R84b 모델 분리 완료. 세부 logs/r84b.log\n")
+
+
 if __name__ == "__main__":
-    {"build": build, "walk": walk, "eval": evaluate}[sys.argv[1] if len(sys.argv) > 1 else "eval"]()
+    {"build": build, "walk": walk, "eval": evaluate, "walk2": walk2, "eval2": evaluate2}[sys.argv[1] if len(sys.argv) > 1 else "eval"]()
