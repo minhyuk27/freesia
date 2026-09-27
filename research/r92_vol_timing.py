@@ -46,7 +46,7 @@ def grid(t, on, o, h, l, c, y, n, tg, sd, W, H):
         stopd = lv[n - 1] + sd
         side = 0; f = -1
         for j in range(i, i + W):
-            dn = l[j] <= ref * (1 - lv[0] - PEN_); up = h[j] >= ref * (1 + lv[0] + PEN_)
+            dn = l[j] <= ref * (1 - lv[0]) * (1 - PEN_); up = h[j] >= ref * (1 + lv[0]) * (1 + PEN_)
             if dn and up: break
             if dn: side = 1; f = j; break
             if up: side = -1; f = j; break
@@ -59,6 +59,7 @@ def grid(t, on, o, h, l, c, y, n, tg, sd, W, H):
                     px = ref * (1 - side * lv[k])
                     if (side > 0 and l[j] <= px * (1 - PEN_)) or (side < 0 and h[j] >= px * (1 + PEN_)):
                         filled[k] = True; qty += 1.0 / n; cost += px / n
+            if qty == 0: j += 1; continue
             avg = cost / qty
             stp = ref * (1 - side * stopd); tgt = avg + (ref - avg) * (1 - tg)
             if (side > 0 and l[j] <= stp) or (side < 0 and h[j] >= stp):
@@ -67,6 +68,7 @@ def grid(t, on, o, h, l, c, y, n, tg, sd, W, H):
             if j > f and ((side > 0 and h[j] >= tgt * (1 + PEN_)) or (side < 0 and l[j] <= tgt * (1 - PEN_))):
                 r = qty * side * (tgt / avg - 1) - qty * 2 * CM_; break
             j += 1
+        if qty == 0: busy = j; continue
         if np.isnan(r): r = qty * side * (c[j - 1] / avg - 1) - qty * (CM_ + CT_)
         E[m] = f; Rr[m] = r; m += 1; busy = j
     return E[:m], Rr[:m]
@@ -132,19 +134,24 @@ def modeB(W):
         P(f"  {bk:3s}: n={len(g):5d} 거래당 {g.ret.mean()*1e4:+6.1f}bp 승률 {(g.ret>0).mean():.3f} 최대역행 {g.mae.mean()*1e4:5.0f}bp | " +
           " ".join(f"{y%100}:{v*1e4:+.0f}" for y, v in g.groupby(g.ts.dt.year).ret.mean().items()))
     base = np.minimum(np.clip(D.vreg.values ** 1.5, 0.3, 4) * np.clip(D.pred.values / 0.001, 0.5, 3), 6)
-    P("\n===== 배율 g(pr) × V3, R40 계좌 w2.5N10 킬 3%/12h (학습 22~23 / 평가 24~26)")
-    for nm, gfun in (("기준", lambda x: np.ones_like(x)), ("고p×1.5", lambda x: np.where(x >= .8, 1.5, 1.0)), ("고p×2", lambda x: np.where(x >= .8, 2.0, 1.0)),
-                     ("고p×0.5", lambda x: np.where(x >= .8, 0.5, 1.0)), ("저p×0.5", lambda x: np.where(x < .5, 0.5, 1.0)), ("저p 제외", lambda x: np.where(x < .2, 0.0, 1.0)),
-                     ("선형 0.5~1.5", lambda x: 0.5 + x), ("선형 1.5~0.5", lambda x: 1.5 - x), ("최고p 제외", lambda x: np.where(x >= .95, 0.0, 1.0))):
-        mult = np.maximum(base * gfun(D.pr.values), 1e-9)
-        res = RL.sim(D, 2.5, 10, mult, X=0.03, H=720)
-        if res is None: P(f"  {nm}: 파산"); continue
-        dr = R80.daily_from_eq(res[0])
-        out = []
-        for a, b in (("2022-01-01", "2024-01-01"), ("2024-01-01", "2026-09-20")):
-            x = dr[(dr.index >= a) & (dr.index < b)]; m = R80.metrics(dr, a, b)
-            out.append(f"샤프 {x.mean()/x.std()*np.sqrt(365):.2f} 월 {m['mo']:+.1f}% MDD {m['mdd']:.0f}%")
-        P(f"  {nm:12s} 학습 {out[0]} | 평가 {out[1]}")
+    tr = D[D.ts < "2024-01-01"]; edges = [0, .2, .5, .8, .95, 1.01]
+    D["b"] = np.digitize(D.pr, edges[1:-1]); tr = D[D.ts < "2024-01-01"]
+    wt = (tr.groupby("b").ret.mean() / tr.groupby("b").mae.mean()).clip(lower=0); wt = wt / wt[D.b.value_counts().index].mul(D.b.value_counts()).sum() * len(D)
+    P("학습(22~23) 구간 가중(수익/역행, 평균 1): " + " ".join(f"Q{int(k)}:{v:.2f}" for k, v in wt.items()))
+    G = [("기준", lambda x: np.ones_like(x)), ("Q4×2", lambda x: np.where(x >= .95, 2.0, 1.0)), ("Q4×3", lambda x: np.where(x >= .95, 3.0, 1.0)),
+         ("Q4만", lambda x: np.where(x >= .95, 1.0, 0.0)), ("Q4만×2", lambda x: np.where(x >= .95, 2.0, 0.0)), ("Q3+Q4만", lambda x: np.where(x >= .8, 1.0, 0.0)),
+         ("Q4 제외", lambda x: np.where(x >= .95, 0.0, 1.0)), ("학습 가중", lambda x: wt.reindex(np.digitize(x, edges[1:-1])).fillna(0).values)]
+    P("\n===== 배율 g(pr) × V3, R40 계좌 킬 3%/12h (학습 22~23 / 평가 24~26) — 3단 w1N4 · w1.5N6 · w2.5N10")
+    for w_, N_ in ((1, 4), (1.5, 6), (2.5, 10)):
+        for nm, gfun in G:
+            mult = np.maximum(base * gfun(D.pr.values), 1e-9)
+            res = RL.sim(D, w_, N_, mult, X=0.03, H=720)
+            if res is None: P(f"  w{w_}N{N_} {nm:8s}: 파산"); continue
+            dr = R80.daily_from_eq(res[0]); out = []
+            for a_, b_ in (("2022-01-01", "2024-01-01"), ("2024-01-01", "2026-09-20")):
+                x = dr[(dr.index >= a_) & (dr.index < b_)]; m = R80.metrics(dr, a_, b_)
+                out.append(f"샤프 {x.mean()/x.std()*np.sqrt(365):.2f} 월 {m['mo']:+.1f}% MDD {m['mdd']:.0f}%")
+            P(f"  w{w_}N{N_} {nm:8s} 학습 {out[0]} | 평가 {out[1]} | 최악여유 {res[2]*100:.0f}%")
 
 
 if __name__ == "__main__":
