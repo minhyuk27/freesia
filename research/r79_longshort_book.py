@@ -95,8 +95,9 @@ def build():
     P(f"조각 {A.sl.nunique()}개, 거래 {len(A):,} ({time.time()-t_:.0f}s)")
 
 
-def select(A, Y, K, sides, corr_max=0.5):
+def select(A, Y, K, sides, corr_max=0.5, lookback=None):
     tr = A[(A.tx < pd.Timestamp(f"{Y}-01-01", tz="UTC")) & A.sl.str[:3].ne("DIP")]
+    if lookback: tr = tr[tr.tx >= pd.Timestamp(f"{Y - lookback}-01-01", tz="UTC")]
     tr = tr[tr.sl.str[-1].isin(sides)]
     g = tr.groupby("sl").r
     st = pd.DataFrame({"n": g.size(), "m": g.mean(), "s": g.std()}); st["t"] = st.m / (st.s / np.sqrt(st.n))
@@ -129,13 +130,16 @@ def dip_daily():
     return DIPD
 
 
-def book(A, picks_by_year, use_dip, lev):
-    rows = []; nsl = {}
+def book(A, picks_by_year, use_dip, lev, dipw=None):
+    """dipw: DIP 자본 비중(None = 조각 수로 균등). 나머지는 선택 조각에 균등."""
+    rows = []; nsl = {}; dsh = {}
     for Y, picks in picks_by_year.items():
         nsl[Y] = len(picks) + int(use_dip)
+        dsh[Y] = (dipw if (dipw is not None and picks) else (1 / nsl[Y] if nsl[Y] else 0)) if use_dip else 0
         if not picks: continue
+        each = (1 - dsh[Y]) / len(picks)
         T = A[A.sl.isin(picks) & (A.te >= pd.Timestamp(f"{Y}-01-01", tz="UTC")) & (A.te < pd.Timestamp(f"{Y+1}-01-01", tz="UTC"))].copy()
-        T["pnl"] = T.r * lev / nsl[Y] * 0.5
+        T["pnl"] = T.r * lev * each * 0.5
         rows.append(T)
     if not rows and not use_dip: return None
     T = pd.concat(rows) if rows else pd.DataFrame(columns=["tx", "pnl", "side"])
@@ -143,7 +147,7 @@ def book(A, picks_by_year, use_dip, lev):
     daily = (T.groupby(pd.to_datetime(T.tx, utc=True).dt.floor("D")).pnl.sum() if len(T) else pd.Series(dtype=float)).reindex(idx).fillna(0)
     if use_dip:
         dd = dip_daily().reindex(idx).fillna(0)
-        share = pd.Series([1 / nsl[d.year] if nsl.get(d.year) else 0 for d in idx], index=idx)
+        share = pd.Series([dsh.get(d.year, 0) for d in idx], index=idx)
         daily = daily + dd * lev * share
         T = pd.concat([T, pd.DataFrame({"tx": idx, "pnl": (dd * lev * share).values, "side": 1})])
     eq = (1 + daily.clip(lower=-0.99)).cumprod()
@@ -170,6 +174,21 @@ if __name__ == "__main__":
                     r = book(A, picks, use_dip, lev)
                     if r is None: continue
                     P(f"  {sn:4s} K={K_:2d} DIP {'포함' if use_dip else '없음'} {lev}배 | 월 {r['mo']:+6.2f}% MDD {r['mdd']:6.1f}% 흑자달 {r['wm']:.0%} | {r['yr']} | 거래 {r['n']} | {r['ls']}")
+    if "v2" in sys.argv:
+        # 국면 조건 숏: BTC 30일 수익 < 0 일 때 진입한 숏 거래만 남긴 조각 추가
+        d = store.load("klines_1m", "BTCUSDT").set_index("ts").close.resample("1D").last(); reg = (np.log(d).diff(30) < 0).shift(1)
+        Sx = A[A.sl.str[-1].eq("S")].copy(); bear = reg.reindex(Sx.te.dt.floor("D")).fillna(False).values.astype(bool)
+        Sx = Sx[bear]; Sx["sl"] = Sx.sl + "|bear"; Sx["sl"] = Sx.sl.str.replace("|S|bear", "|bearS", regex=False).str.replace("|bear", "", regex=False) + "|S"
+        A2 = pd.concat([A, Sx.assign(sl=Sx.sl.str.replace("|S", "|BEAR|S", regex=False))], ignore_index=True)
+        P(f"\n===== v2: 국면 조건 숏 조각 {Sx.sl.nunique()}개 추가, DIP 비중·선택 기간 변형")
+        for Y in range(2022, 2027): P(f"  {Y} 선택(롱+숏, K=10, 전 기간): " + ", ".join(select(A2, Y, 10, ("L", "S"))))
+        for lb in (None, 2):
+            for sides, sn in ((("L", "S"), "롱+숏"), (("S",), "숏만")):
+                picks = {Y: select(A2, Y, 10, sides, lookback=lb) for Y in range(2022, 2027)}
+                for dw in (None, 0.5, 0.7):
+                    for lev in (1, 3):
+                        r = book(A2, picks, True, lev, dw)
+                        P(f"  {sn:4s} 선택기간 {'전체' if lb is None else f'최근{lb}년'} DIP비중 {'균등' if dw is None else dw} {lev}배 | 월 {r['mo']:+6.2f}% MDD {r['mdd']:6.1f}% 흑자달 {r['wm']:.0%} | {r['yr']} | {r['ls']}")
     P("\n===== 기준: DIP(z0.31) 단독")
     for lev in (1, 3, 5):
         r = book(A, {Y: [] for Y in range(2022, 2027)}, True, lev)   # DIP 1개 조각 = 자본 전부
