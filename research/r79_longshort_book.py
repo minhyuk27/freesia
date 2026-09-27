@@ -126,7 +126,7 @@ def book(A, picks_by_year, use_dip, lev):
     if not rows: return None
     T = pd.concat(rows)
     daily = T.groupby(T.tx.dt.floor("D")).pnl.sum()
-    idx = pd.date_range("2022-01-01", T.tx.max().floor("D"), freq="D", tz="UTC"); daily = daily.reindex(idx).fillna(0)
+    idx = pd.date_range("2022-01-01", T.tx.max().tz_convert("UTC").floor("D").tz_localize(None), freq="D", tz="UTC"); daily = daily.reindex(idx).fillna(0)
     eq = (1 + daily.clip(lower=-0.99)).cumprod()
     mon = eq.resample("ME").last().pct_change().dropna(); yrs = (eq.index[-1] - eq.index[0]).days / 365.25
     yr = eq.resample("YE").last().pct_change(); yr.iloc[0] = eq.resample("YE").last().iloc[0] - 1
