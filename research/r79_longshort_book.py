@@ -115,18 +115,37 @@ def select(A, Y, K, sides, corr_max=0.5):
     return pick
 
 
+DIPD = None
+
+
+def dip_daily():
+    """z0.31을 원래 엔진(R40 sim, V0, w=0.5·N=3, 킬스위치)으로 돌린 일간 수익(자본 대비)."""
+    global DIPD
+    if DIPD is None:
+        import r40_regime_leverage as RL
+        eq, mdd, worst = RL.sim(RL.W, 0.5, 3, np.ones(len(RL.W)))
+        eq.index = pd.DatetimeIndex(eq.index).tz_convert("UTC") if pd.DatetimeIndex(eq.index).tz is not None else pd.DatetimeIndex(eq.index).tz_localize("UTC")
+        d = eq.resample("D").last().ffill(); DIPD = d.pct_change().fillna(d.iloc[0] - 1)
+    return DIPD
+
+
 def book(A, picks_by_year, use_dip, lev):
-    rows = []
+    rows = []; nsl = {}
     for Y, picks in picks_by_year.items():
-        sl = list(picks) + (["DIP|z0.31"] if use_dip else [])
-        if not sl: continue
-        T = A[A.sl.isin(sl) & (A.te >= pd.Timestamp(f"{Y}-01-01", tz="UTC")) & (A.te < pd.Timestamp(f"{Y+1}-01-01", tz="UTC"))].copy()
-        T["pnl"] = T.r * lev / len(sl) * 0.5
+        nsl[Y] = len(picks) + int(use_dip)
+        if not picks: continue
+        T = A[A.sl.isin(picks) & (A.te >= pd.Timestamp(f"{Y}-01-01", tz="UTC")) & (A.te < pd.Timestamp(f"{Y+1}-01-01", tz="UTC"))].copy()
+        T["pnl"] = T.r * lev / nsl[Y] * 0.5
         rows.append(T)
-    if not rows: return None
-    T = pd.concat(rows)
-    daily = T.groupby(T.tx.dt.floor("D")).pnl.sum()
-    idx = pd.date_range("2022-01-01", T.tx.max().tz_convert("UTC").floor("D").tz_localize(None), freq="D", tz="UTC"); daily = daily.reindex(idx).fillna(0)
+    if not rows and not use_dip: return None
+    T = pd.concat(rows) if rows else pd.DataFrame(columns=["tx", "pnl", "side"])
+    idx = pd.date_range("2022-01-01", "2026-09-25", freq="D", tz="UTC")
+    daily = (T.groupby(pd.to_datetime(T.tx, utc=True).dt.floor("D")).pnl.sum() if len(T) else pd.Series(dtype=float)).reindex(idx).fillna(0)
+    if use_dip:
+        dd = dip_daily().reindex(idx).fillna(0)
+        share = pd.Series([1 / nsl[d.year] if nsl.get(d.year) else 0 for d in idx], index=idx)
+        daily = daily + dd * lev * share
+        T = pd.concat([T, pd.DataFrame({"tx": idx, "pnl": (dd * lev * share).values, "side": 1})])
     eq = (1 + daily.clip(lower=-0.99)).cumprod()
     mon = eq.resample("ME").last().pct_change().dropna(); yrs = (eq.index[-1] - eq.index[0]).days / 365.25
     yr = eq.resample("YE").last().pct_change(); yr.iloc[0] = eq.resample("YE").last().iloc[0] - 1
@@ -153,6 +172,6 @@ if __name__ == "__main__":
                     P(f"  {sn:4s} K={K_:2d} DIP {'포함' if use_dip else '없음'} {lev}배 | 월 {r['mo']:+6.2f}% MDD {r['mdd']:6.1f}% 흑자달 {r['wm']:.0%} | {r['yr']} | 거래 {r['n']} | {r['ls']}")
     P("\n===== 기준: DIP(z0.31) 단독")
     for lev in (1, 3, 5):
-        r = book(A, {Y: [] for Y in range(2022, 2027)}, True, lev)
+        r = book(A, {Y: [] for Y in range(2022, 2027)}, True, lev)   # DIP 1개 조각 = 자본 전부
         P(f"  DIP 단독 {lev}배 | 월 {r['mo']:+6.2f}% MDD {r['mdd']:6.1f}% 흑자달 {r['wm']:.0%} | {r['yr']}")
     (R / "logs" / "r79.summary").write_text("R79 롱·숏 다중 조각 수익 구조 완료. 세부 logs/r79.log\n")
