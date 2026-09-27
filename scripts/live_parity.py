@@ -17,7 +17,7 @@ WINDOW = 10080 + 300 + 1500                                         # rvreg(1008
 
 
 def main():
-    E = pd.read_parquet(R / "data" / "r32_events.parquet"); E["ts"] = pd.DatetimeIndex(E.ts)
+    E = pd.read_parquet(R / "data" / "r32_events.parquet"); E["ts"] = pd.DatetimeIndex(E.ts); E["isbtc"] = (E.sym == "BTCUSDT").astype(float)
     M = joblib.load(R / "data" / "models" / "z031_live_2026.joblib")
     W = pd.read_parquet(R / "data" / "r83_wf_live.parquet"); W["ts"] = pd.DatetimeIndex(W.ts)
     print(f"모델: 학습 ~{M['trained_until']}, {M['n']:,}건, 특징 {len(M['feats'])}")
