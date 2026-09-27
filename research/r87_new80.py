@@ -75,7 +75,7 @@ def strategies(D):
         H["hi24"] = H.high.rolling(24).max(); H["lo24"] = H.low.rolling(24).min()
         H["sma200d"] = c.rolling(4800).mean()
         r1 = H.r1
-        H["skew"] = r1.rolling(168).skew(); H["kurt"] = r1.rolling(168).kurt()
+        H["sk"] = r1.rolling(168).skew(); H["ku"] = r1.rolling(168).kurt()
         H["VR"] = lc.diff(24).rolling(720).var() / (24 * r1.rolling(720).var())
         HF[s] = H
     # ---------- V 변동성 국면 ----------
@@ -291,11 +291,11 @@ def strategies(D):
             return entries_at(D, s, T.t, side, BIG, BIG, 24)
         add(f"{nm} {desc} (매일 00시, 24h)", f)
     # ---------- Q 분포 모양 ----------
-    for nm, desc, cond, side, hold in (("Q01", "7일 왜도 < −1 → 롱 24h", lambda H: H.skew < -1, 1, 24), ("Q02", "7일 왜도 > 1 → 숏 24h", lambda H: H.skew > 1, -1, 24),
-                                       ("Q03", "첨도 > 8 + 24h 하락 → 롱 24h", lambda H: (H.kurt > 8) & (H.r24 < 0), 1, 24),
-                                       ("Q04", "첨도 > 8 + 24h 상승 → 숏 24h", lambda H: (H.kurt > 8) & (H.r24 > 0), -1, 24),
-                                       ("Q05", "왜도 < −1 + 24h 저점권 → 롱 72h", lambda H: (H.skew < -1) & (H.close < H.lo24 * 1.01), 1, 72),
-                                       ("Q06", "왜도 > 1 + 24h 고점권 → 숏 72h", lambda H: (H.skew > 1) & (H.close > H.hi24 * 0.99), -1, 72)):
+    for nm, desc, cond, side, hold in (("Q01", "7일 왜도 < −1 → 롱 24h", lambda H: H.sk < -1, 1, 24), ("Q02", "7일 왜도 > 1 → 숏 24h", lambda H: H.sk > 1, -1, 24),
+                                       ("Q03", "첨도 > 8 + 24h 하락 → 롱 24h", lambda H: (H.ku > 8) & (H.r24 < 0), 1, 24),
+                                       ("Q04", "첨도 > 8 + 24h 상승 → 숏 24h", lambda H: (H.ku > 8) & (H.r24 > 0), -1, 24),
+                                       ("Q05", "왜도 < −1 + 24h 저점권 → 롱 72h", lambda H: (H.sk < -1) & (H.close < H.lo24 * 1.01), 1, 72),
+                                       ("Q06", "왜도 > 1 + 24h 고점권 → 숏 72h", lambda H: (H.sk > 1) & (H.close > H.hi24 * 0.99), -1, 72)):
         def f(s, cond=cond, side=side, hold=hold):
             H = HF[s]; m = cond(H).fillna(False); m = m & ~m.shift(1).fillna(False).astype(bool); T = H[m]
             return entries_at(D, s, T.t, side, BIG, BIG, hold)
