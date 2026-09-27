@@ -42,7 +42,15 @@ def metrics_5m(sym, points=500):
         js = rest._get(path, {"symbol": sym, "period": "5m", "limit": points})
         s = pd.Series({pd.Timestamp(int(x["timestamp"]), unit="ms", tz="UTC"): float(x[field]) for x in js})
         cols[name] = s
-    return pd.DataFrame(cols).sort_index()
+    df = pd.DataFrame(cols).sort_index()
+    df.index = df.index - pd.Timedelta(minutes=5)                   # API 시각 = 저장 파일 시각 + 5분 (live_parity C로 확인)
+    return df
+
+
+def current_open(sym):
+    """진행 중인 1분봉의 시가(봉 시작 시 지정가 계산용)."""
+    js = rest._get("/fapi/v1/klines", {"symbol": sym, "interval": "1m", "limit": 1})
+    return pd.Timestamp(int(js[-1][0]), unit="ms", tz="UTC"), float(js[-1][1])
 
 
 def daily_close(sym, days=500):

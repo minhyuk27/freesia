@@ -42,7 +42,7 @@ def klines(name, sym, start_ms, end_ms):
     if not rows:
         return None
     a = pd.DataFrame(rows).iloc[:, :11]
-    a = a[a[6].astype("int64") < now_ms]  # close_time 이 지난 봉만 (진행 중 봉 제외)
+    a = a[a[6].astype("int64") < now_ms - 5000]  # 마감 후 5초 지난 봉만 (진행 중·집계 미완 봉 제외, 2026-09-27 수정)
     out = pd.DataFrame({"ts": pd.to_datetime(a[0].astype("int64"), unit="ms", utc=True)})
     cols = ["open", "high", "low", "close"] if ohlc_only else \
         ["open", "high", "low", "close", "volume", "quote_volume", "trades",
