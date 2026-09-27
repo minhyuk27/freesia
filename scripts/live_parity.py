@@ -29,11 +29,11 @@ def main():
         diffs = {}; preds = []
         for _, e in ev.iterrows():
             f = int(e.f); lo = f - WINDOW
-            k = K.iloc[lo:f]                                           # 분 f−1 까지(실전과 동일하게 창만)
+            k = K.iloc[lo:f + 1]                                       # 분 f−1 까지 + 진행 중인 분 f(시가만 사용 — 실전도 동일)
             t0, t1 = k.index[0] - pd.Timedelta("1D"), k.index[-1]
             F, rv1, piv = LF.minute_features(k, PR[(PR.index >= t0) & (PR.index <= t1)], MT[(MT.index >= t0) & (MT.index <= t1)],
                                              FU[(FU.index >= t0 - pd.Timedelta("3D")) & (FU.index <= t1)])
-            B = int(e.B); a = f; s0 = (a // B) * B; j_s0 = s0 - lo; j = len(k) - 1
+            B = int(e.B); a = f; s0 = (a // B) * B; j_s0 = s0 - lo; j = len(k) - 2         # j = 분 f−1
             T, lv = LF.level_features(a, B, float(e.k), k.open.values[j_s0], rv1[j_s0], k.close.values[j], piv[j], s == "BTCUSDT")
             row = {**{kk: v[j] for kk, v in F.items()}, **lv}
             for c in M["feats"]:
