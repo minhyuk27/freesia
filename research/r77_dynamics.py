@@ -17,7 +17,7 @@
   W90w 90일·최근 30일 가중 3 / W180w 180일·최근 30일 가중 3 / W180 180일 균등 / EXP 확장창(2020~, 월별 재학습, 기준)
 모델: HistGB(작게: 150회, 잎 15, 최소 30, L2 1) / 로지스틱(C=0.05)
 평가(2022-01~2026-09): T1 정확도·로그손실(학습 창 빈도 대비)·클래스별 확신 상위 10% 적중. T2 적중·확신 상위 10/20% 적중·24시간 보유 순수익(14bp).
-그룹 넣고 빼기: W180w·HistGB·주별 재학습으로 ALL / PRICE+그룹 단독 / ALL−그룹.
+그룹 넣고 빼기: 확장창·HistGB·월별 재학습으로 ALL / PRICE+그룹 단독 / ALL−그룹 (180일 가중 창은 main에서 가장 나빠 교체).
 사용: python research/r77_dynamics.py [build|main|ablate]"""
 import sys, warnings, time
 from pathlib import Path
@@ -199,7 +199,7 @@ if __name__ == "__main__":
             y = D[target].values.astype(int)
             cfgs = [("ALL", allf)] + [(f"PRICE+{g}", base + [idx[c] for c in FE if c.startswith(g + "|")]) for g in GR if g != "PRICE"] + \
                    [(f"ALL−{g}", [idx[c] for c in FE if not c.startswith(g + "|")]) for g in GR]
-            for nm, fs in cfgs: jobs.append((nm, 180, 3.0, "GB", fs, target, X, y, t, days, "W"))
+            for nm, fs in cfgs: jobs.append((nm, None, 1.0, "GB", fs, target, X, y, t, days, "M"))   # 확장창·월별(main에서 가장 나았음)
     P(f"{mode}: 작업 {len(jobs)}개, 특징 {len(FE)}, 평가 {days[0]:%Y-%m-%d}~{days[-1]:%Y-%m-%d}")
     lines = {}
     with Pool(2) as pool:
