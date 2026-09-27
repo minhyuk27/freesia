@@ -168,7 +168,8 @@ def main():
         time.sleep(max(0, nxt - now))
         M = int((nxt - 6 - LF.EPOCH.timestamp()) // 60)
         try:
-            E.step(M)
+            t0 = time.time(); E.step(M)
+            (LOG / "steps.log").open("a").write(f"{pd.Timestamp.now(tz='UTC')} M={M} {time.time()-t0:.1f}s 결정 {sum(1 for b in E.S['bars'].values() if b.get('live_min') == M)} 대기봉 {sum(1 for b in E.S['bars'].values() if b['status'] == 'pending')}\n")
         except Exception:
             (LOG / "errors.log").open("a").write(f"{pd.Timestamp.now(tz='UTC')} M={M}\n{traceback.format_exc()}\n")
 
