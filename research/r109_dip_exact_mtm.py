@@ -79,7 +79,7 @@ def dip_with_px():
 
 
 def run(E, G, w, N, L):
-    LO, CL = G; t0 = int(E.e.min())
+    LO, CL, t0 = G
     day, pk, info = sim4(E.e.values.astype(np.int64), E.x.values.astype(np.int64), E.ret.values, E.mae.values, E.k.values.astype(np.int64),
                          E.mult.values, E.s.values.astype(np.int64), E.px.values, LO, CL, t0, float(w), float(N), float(L), 0.03, 720, 120, J.MMR)
     if pk < 0: return None, info

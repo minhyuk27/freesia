@@ -69,7 +69,7 @@ def sim3(e_, x_, r_, m_, k_, u_, s_, px_, LO, CL, t0, w, N, L33, X, Hh, Lk, mmr,
 
 
 def run(E, G, w, N, L, gov):
-    LO, CL = G; t0 = int(E.e.min()); gd, gw, gN, gH = gov
+    LO, CL, t0 = G; gd, gw, gN, gH = gov
     day, pk, info = sim3(E.e.values.astype(np.int64), E.x.values.astype(np.int64), E.ret.values, E.mae.values, E.k.values.astype(np.int64),
                          E.mult.values, E.s.values.astype(np.int64), E.px.values, LO, CL, t0, float(w), float(N), float(L), 0.03, 720, 120, J.MMR,
                          float(gd), int(gw), float(gN), int(gH))

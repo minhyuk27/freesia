@@ -74,11 +74,11 @@ def grid(t0, name):
         lo[mi[ok] - t0] = k.low.values[ok]; cl[mi[ok] - t0] = k.close.values[ok]
         LOs.append(pd.Series(lo).ffill().bfill().values); CLs.append(pd.Series(cl).ffill().bfill().values)
     T = min(len(a) for a in LOs)
-    return np.vstack([a[:T] for a in LOs]), np.vstack([a[:T] for a in CLs])
+    return np.vstack([a[:T] for a in LOs]), np.vstack([a[:T] for a in CLs]), t0
 
 
 def run(E, G, w, N, L):
-    LO, CL = G; t0 = int(E.e.min())
+    LO, CL, t0 = G                                   # 격자 시작 분 = t0 (사건 첫 분이 아님 — 2026-09-30 정렬 버그 수정)
     day, pk, info = sim2(E.e.values.astype(np.int64), E.x.values.astype(np.int64), E.ret.values, E.mae.values, E.k.values.astype(np.int64),
                          E.mult.values, E.s.values.astype(np.int64), E.px.values, LO, CL, t0, float(w), float(N), float(L), 0.03, 720, 120, J.MMR)
     if pk < 0:
