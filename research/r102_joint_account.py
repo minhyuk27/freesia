@@ -139,7 +139,7 @@ def sim(E, w, N, L33, X=0.03, Hh=720, Lk=120):
 def sim_mtm(e_, x_, r_, m_, k_, u_, s_, px_, LO, CL, t0, w, N, L33, X, Hh, Lk, mmr):
     """분 단위 시가평가: 돌파 롱은 종목별 (Σ명목/진입가, Σ명목)으로 합산해 분 저가로 평가, 딥은 보유 중 최대 역행을 손실로 가정(보수).
     판정: 자본 + 미실현(분 저가) < mmr × 총명목 → 청산(파산). 크기는 실현 자본 기준. 반환: 일말 평가자본(시가평가), 최대 명목 배수."""
-    T = LO.shape[1]; nd = T // 1440 + 1; day = np.full(nd, np.nan)
+    T = LO.shape[1]; nd = (t0 + T) // 1440 + 1; day = np.full(nd, np.nan)
     ne = len(e_); order_x = np.argsort(x_)
     cap = 1.0; Q = np.zeros(2); NS = np.zeros(2); dipN = 0.0; dipL = 0.0
     isopen = np.zeros(ne, np.bool_); nn = np.zeros(ne)
