@@ -87,6 +87,9 @@ def run(E, G, w, N, L):
     return R80.daily_from_eq(eq), pk
 
 
+W_, N_, L_ = (3, 4, 5, 6), (12, 16, 20, 24, 32), (3, 4, 6, 8)
+if len(sys.argv) > 1: W_, N_, L_ = (2, 2.5, 3), (8, 10, 12), (8, 10, 12, 16, 20)
+
 if __name__ == "__main__":
     t_ = time.time()
     D, cr, cm, W = dip_with_px()
@@ -98,8 +101,8 @@ if __name__ == "__main__":
     E = pd.concat([D.dropna(subset=["px"]), BK[BK.e >= start]], ignore_index=True).sort_values(["e", "k"]).reset_index(drop=True)
     Gd = G7.grid(start, "mark_1m")
     rows = []
-    for w, N, L in itertools.product((3, 4, 5, 6), (12, 16, 20, 24, 32), (3, 4, 6, 8)):
-        if N < 3 * w: continue
+    for w, N, L in itertools.product(W_, N_, L_):
+        if N < 3 * w and len(sys.argv) == 1: continue
         d, pk = run(E, Gd, w, N, L)
         if d is None:
             rows.append(dict(w=w, N=N, L=L, ok=False, 파산=f"{J.D0 + pd.Timedelta(minutes=int(pk[0])):%Y-%m-%d %H:%M} 딥{pk[1]:.0f}·돌파{pk[2]:.0f}")); continue
