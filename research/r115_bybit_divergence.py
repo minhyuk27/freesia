@@ -51,11 +51,12 @@ def feats(sym):
     return F, ln, stale.rolling(240, min_periods=1).max().astype(bool)
 
 
-if __name__ == "__main__":
+def analyze(feats_fn, out):
+    """A(독립 방향)·B(돌파 필터)·C(딥 필터) 공통 분석 — R116 등에서 특징 함수만 바꿔 재사용."""
     t_ = time.time()
     rows = []; FE = {}
     for sym in ("BTCUSDT", "ETHUSDT"):
-        Fm, lc, bad = feats(sym); FE[sym] = Fm
+        Fm, lc, bad = feats_fn(sym); FE[sym] = Fm
         P(f"{sym} 특징 {Fm.shape}, 기간 {Fm.index[0]} ~ {Fm.index[-1]}, 결측률 " + " ".join(f"{c}:{Fm[c].isna().mean()*100:.0f}%" for c in ("oiB60", "vsh60", "dfund")) + f" ({time.time()-t_:.0f}s)")
         for h in F13.HS:
             y = (lc.shift(-(1 + h)) - lc.shift(-1)).values; sel = np.arange(0, len(Fm), h)
@@ -90,5 +91,9 @@ if __name__ == "__main__":
             ra, rb, a, b = F13.quint(nm, X[X[f].notna()], f, tr[X[f].notna().values])
             mark = " ◀ 채택 후보" if abs(ra) >= 0.9 and np.sign(ra) == np.sign(rb) else ""
             P(f"  {f:7s} " + " ".join(f"{v*1e4:+6.1f}" for v in a.values) + f" (ρ{ra:+.1f}) | " + " ".join(f"{v*1e4:+6.1f}" for v in b.values) + f" (ρ{rb:+.1f}){mark}")
-    O.to_parquet(R / "data" / "r115_ic.parquet", index=False)
+    O.to_parquet(R / "data" / out, index=False)
     P(f"완료 ({time.time()-t_:.0f}s)")
+
+
+if __name__ == "__main__":
+    analyze(feats, "r115_ic.parquet")
