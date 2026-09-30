@@ -42,7 +42,8 @@ def get(market, to):
 def fetch_month(market, y, m, now):
     per = pd.Period(f"{y}-{m:02d}", freq="M")
     lo = per.start_time.tz_localize("UTC")
-    hi = min(per.end_time.tz_localize("UTC").floor("min") + pd.Timedelta(minutes=1), now.floor("min"))
+    month_end_excl = (per + 1).start_time.tz_localize("UTC")  # 다음 달 시작 = 이번 달 배타적 상한
+    hi = min(month_end_excl, now.floor("min"))
     if hi <= lo:
         return None, True
     rows, to = [], hi.strftime("%Y-%m-%dT%H:%M:%S") + "Z"
@@ -66,7 +67,7 @@ def fetch_month(market, y, m, now):
                               "candle_acc_trade_price": "value"})
     out = out[["ts", "open", "high", "low", "close", "volume", "value"]].astype(
         {c: "float64" for c in ["open", "high", "low", "close", "volume", "value"]})
-    partial = hi < (per.end_time.tz_localize("UTC") + pd.Timedelta(minutes=1))
+    partial = hi < month_end_excl  # now가 아직 이번 달 끝에 도달하지 않음 = 진행 중인 달
     return out, partial
 
 
