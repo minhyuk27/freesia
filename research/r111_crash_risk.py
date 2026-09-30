@@ -60,9 +60,10 @@ if __name__ == "__main__":
             cut = pd.Timestamp(f"{Y}-01-01", tz="UTC")
             tr = (E.ts < cut - pd.Timedelta(days=1)).values; te = ((E.ts >= cut) & (E.ts < pd.Timestamp(f"{Y+1}-01-01", tz="UTC"))).values
             if te.sum() == 0: continue
+            Xt = X[tr]; ok = np.array([np.isfinite(Xt[:, j]).sum() > 100 and np.nanstd(Xt[:, j]) > 0 for j in range(X.shape[1])])   # 학습 구간에 비었거나 상수인 특징 제외
             mdl = HistGradientBoostingClassifier(max_iter=300, learning_rate=0.05, max_leaf_nodes=31, min_samples_leaf=200,
-                                                 l2_regularization=1.0, random_state=0).fit(X[tr], E[lab].values[tr])
-            E.loc[te, "p_" + lab] = mdl.predict_proba(X[te])[:, 1]
+                                                 l2_regularization=1.0, random_state=0).fit(Xt[:, ok], E[lab].values[tr])
+            E.loc[te, "p_" + lab] = mdl.predict_proba(X[te][:, ok])[:, 1]
         g = E[E["p_" + lab].notna()]
         rows = []
         for Y, h in g.groupby(g.ts.dt.year):
