@@ -1,4 +1,5 @@
-"""R102 — z0.31 딥 + z0.33 24h 돌파 앙상블을 한 계좌(공유 자본)로: 동시 명목·펀딩·스톱 슬리피지·청산을 함께 반영.
+"""R102 — (청산 판정: 분 단위 시가평가, sim_mtm)
+ z0.31 딥 + z0.33 24h 돌파 앙상블을 한 계좌(공유 자본)로: 동시 명목·펀딩·스톱 슬리피지·청산을 함께 반영.
 
 R101 결합(샤프 2.91)은 두 전략의 일간 수익을 더한 근사였다. 여기서는 거래 목록을 시간순으로 한 엔진에 넣는다.
 z0.33 거래 목록: R101 학습 1위(DT N4 K0.5 · MA5 · 세션 종가 · 변동성 조절)와 학습 상위 8 동일가중(민감도).
@@ -91,14 +92,14 @@ def lw_events(T, s_in, s_out=2e-4):
     px = T.px.values * (1 + s_in); ex = T.ex.values * (1 - s_out)
     ret = ex / px - 1 - 2 * costs.TAKER - T.fund.values
     mae = np.maximum(1 - T.lo.values / px, 0) + costs.TAKER
-    return pd.DataFrame(dict(e=T.e.values, x=T.x.values, ret=ret, mae=mae, k=1, mult=T.sz.values * T.wt.values))
+    return pd.DataFrame(dict(e=T.e.values, x=T.x.values, ret=ret, mae=mae, k=1, mult=T.sz.values * T.wt.values, s=(T.sym.values == 'ETHUSDT').astype(int), px=px))
 
 
 def dip_events():
     W = R80.dip_frame(0.0025)
     mult = np.minimum(np.clip(W.vreg.values ** 1.5, 0.3, 4) * np.clip(W.pred.values / 0.001, 0.5, 3), 6)
     e = mins(W.ts)
-    return pd.DataFrame(dict(e=e, x=e + (W.x.values - W.f.values), ret=W.ret.values, mae=W.mae.values, k=0, mult=mult))
+    return pd.DataFrame(dict(e=e, x=e + np.maximum(W.x.values - W.f.values, 1), ret=W.ret.values, mae=W.mae.values, k=0, mult=mult, s=(W.sym.values == 'ETHUSDT').astype(int), px=1.0))
 
 
 def sim(E, w, N, L33, X=0.03, Hh=720, Lk=120):
@@ -134,15 +135,82 @@ def sim(E, w, N, L33, X=0.03, Hh=720, Lk=120):
     return eq, peak_not
 
 
+@numba.njit(cache=True)
+def sim_mtm(e_, x_, r_, m_, k_, u_, s_, px_, LO, CL, t0, w, N, L33, X, Hh, Lk, mmr):
+    """분 단위 시가평가: 돌파 롱은 종목별 (Σ명목/진입가, Σ명목)으로 합산해 분 저가로 평가, 딥은 보유 중 최대 역행을 손실로 가정(보수).
+    판정: 자본 + 미실현(분 저가) < mmr × 총명목 → 청산(파산). 크기는 실현 자본 기준. 반환: 일말 평가자본(시가평가), 최대 명목 배수."""
+    T = LO.shape[1]; nd = T // 1440 + 1; day = np.full(nd, np.nan)
+    ne = len(e_); order_x = np.argsort(x_)
+    cap = 1.0; Q = np.zeros(2); NS = np.zeros(2); dipN = 0.0; dipL = 0.0
+    isopen = np.zeros(ne, np.bool_); nn = np.zeros(ne)
+    ce_t = np.zeros(ne, np.int64); ce_r = np.zeros(ne); nc = 0; lo_p = 0; rsum = 0.0; halt = -1
+    pe = 0; px_i = 0; peak = 0.0
+    for t in range(T):
+        m = t0 + t
+        while px_i < ne and x_[order_x[px_i]] <= m:
+            q = order_x[px_i]; px_i += 1
+            if not isopen[q]: continue
+            isopen[q] = False; n = nn[q]; cap += n * r_[q]
+            if k_[q] == 1:
+                Q[s_[q]] -= n / px_[q]; NS[s_[q]] -= n
+            else:
+                dipN -= n; dipL -= n * m_[q]
+                ce_t[nc] = m; ce_r[nc] = r_[q]; nc += 1; rsum += r_[q]
+        while lo_p < nc and ce_t[lo_p] <= m - Lk:
+            rsum -= ce_r[lo_p]; lo_p += 1
+        if rsum < -X and m + Hh > halt: halt = m + Hh
+        while pe < ne and e_[pe] <= m:
+            q = pe; pe += 1
+            if e_[q] < m or x_[q] <= m: continue
+            if k_[q] == 0:
+                if m < halt: continue
+                n = min(cap * w * u_[q], max(cap * N - dipN, 0.0))
+            else:
+                n = cap * L33 / 48.0 * u_[q]
+            if n <= 1e-12: continue
+            isopen[q] = True; nn[q] = n
+            if k_[q] == 1:
+                Q[s_[q]] += n / px_[q]; NS[s_[q]] += n
+            else:
+                dipN += n; dipL += n * m_[q]
+        tot = NS[0] + NS[1] + dipN
+        if tot > 0:
+            eqlo = cap + Q[0] * LO[0, t] - NS[0] + Q[1] * LO[1, t] - NS[1] - dipL
+            if eqlo <= mmr * tot: return day, -1.0
+            if tot / cap > peak: peak = tot / cap
+        if (m + 1) % 1440 == 0:
+            day[m // 1440] = cap + Q[0] * CL[0, t] - NS[0] + Q[1] * CL[1, t] - NS[1]
+    return day, peak
+
+
+GRID = {}
+
+
+def grid(t0):
+    if t0 in GRID: return GRID[t0]
+    LOs, CLs = [], []
+    for sym in ("BTCUSDT", "ETHUSDT"):
+        k = store.load("klines_1m", sym); mi = mins(k.ts)
+        T1 = mi.max() + 1; lo = np.full(T1 - t0, np.nan); cl = np.full(T1 - t0, np.nan); ok = mi >= t0
+        lo[mi[ok] - t0] = k.low.values[ok]; cl[mi[ok] - t0] = k.close.values[ok]
+        LOs.append(pd.Series(lo).ffill().bfill().values); CLs.append(pd.Series(cl).ffill().bfill().values)
+    T = min(len(a) for a in LOs)
+    GRID[t0] = (np.vstack([a[:T] for a in LOs]), np.vstack([a[:T] for a in CLs]))
+    return GRID[t0]
+
+
 def rep(lab, E, w, N, L33):
-    res = sim(E, w, N, L33)
-    if res is None:
-        P(f"  {lab:34s} 파산"); return None
-    eq, pk = res; d = R80.daily_from_eq(eq)
+    t0 = int(E.e.min()); LO, CL = grid(t0)
+    day, pk = sim_mtm(E.e.values.astype(np.int64), E.x.values.astype(np.int64), E.ret.values, E.mae.values, E.k.values.astype(np.int64),
+                      E.mult.values, E.s.values.astype(np.int64), E.px.values, LO, CL, t0, float(w), float(N), float(L33), 0.03, 720, 120, MMR)
+    if pk < 0:
+        P(f"  {lab:34s} 파산(분 시가평가 청산)"); return None
+    eq = pd.Series(day, index=D0 + pd.to_timedelta(np.arange(len(day)), unit="D")).dropna()
+    d = R80.daily_from_eq(eq)
     a = R80.metrics(d, "2022-01-01", "2024-01-01"); b = R80.metrics(d, "2024-01-01", "2026-09-23")
     s = lambda x: x.mean() / x.std() * np.sqrt(365) if x.std() > 0 else np.nan
     P(f"  {lab:34s} 22~23 월 {a['mo']:+6.1f}% MDD {a['mdd']:5.0f}% | 평가 24~26 월 {b['mo']:+6.1f}% 중앙 {b['med']:+5.1f}% 하위10% {b['p10']:+6.1f}%"
-      f" ≥100%달 {b['big']} MDD {b['mdd']:5.0f}% 샤프 {s(d['2024':]):.2f} | 최대 명목 {pk:4.1f}배 | {b['yr']}")
+      f" ≥100%달 {b['big']} MDD {b['mdd']:5.0f}% 샤프 {s(d['2024':'2026-09-22']):.2f} | 최대 명목 {pk:4.1f}배 | {b['yr']}")
     return d
 
 
@@ -169,10 +237,10 @@ if __name__ == "__main__":
             E = E[E.e >= mins([pd.Timestamp("2022-01-01", tz="UTC")])[0]].sort_values(["e", "k"]).reset_index(drop=True)
             P(f"\n===== 공유 계좌: z0.31 + z0.33[{nm}] · 스톱 슬리피지 {s_in*1e4:.0f}bp")
             for tier, (w, N) in (("무레버(w1N4)", (1, 4)), ("중간(w2N8)", (2, 8)), ("공격(w3N12)", (3, 12))):
-                for L33 in (0, 6, 12, 24, 48):
+                for L33 in ((0, 1, 2, 3, 4, 6, 8, 12) if nm == 'TOP1' else (0, 0.5, 1, 1.5, 2, 3, 4)):
                     rep(f"{tier} L33={L33}", E, w * 1.0, N, L33 * w)
-            if nm == "TOP8" and s_in > 5e-4:
-                for L33 in (12, 24, 48, 96):
+            if s_in > 5e-4:
+                for L33 in (1, 2, 4, 8):
                     rep(f"돌파 단독 L33={L33}", E[E.k == 1].reset_index(drop=True), 0, 0, L33)
     P(f"완료 ({time.time()-t_:.0f}s)")
     (R / "logs" / "r102.summary").write_text("done\n")
