@@ -57,7 +57,7 @@ def analyze(feats_fn, out):
     rows = []; FE = {}
     for sym in ("BTCUSDT", "ETHUSDT"):
         Fm, lc, bad = feats_fn(sym); FE[sym] = Fm
-        P(f"{sym} 특징 {Fm.shape}, 기간 {Fm.index[0]} ~ {Fm.index[-1]}, 결측률 " + " ".join(f"{c}:{Fm[c].isna().mean()*100:.0f}%" for c in ("oiB60", "vsh60", "dfund")) + f" ({time.time()-t_:.0f}s)")
+        P(f"{sym} 특징 {Fm.shape}, 기간 {Fm.index[0]} ~ {Fm.index[-1]}, 결측률 " + " ".join(f"{c}:{Fm[c].isna().mean()*100:.0f}%" for c in Fm.columns[:4]) + f" ({time.time()-t_:.0f}s)")
         for h in F13.HS:
             y = (lc.shift(-(1 + h)) - lc.shift(-1)).values; sel = np.arange(0, len(Fm), h)
             for fn in Fm.columns:
