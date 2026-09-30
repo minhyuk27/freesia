@@ -63,7 +63,7 @@ if __name__ == "__main__":
     for sym in ("BTCUSDT", "ETHUSDT"):
         X, y, OHLC, bad = build(sym)
         P(f"{sym} 특징 {X.shape} ({time.time()-t_:.0f}s)")
-        pred = pd.Series(np.nan, index=X.index, dtype="float32"); trq = {}
+        pred = pd.Series(np.nan, index=X.index, dtype="float64"); trq = {}
         Xv = X.values; yv = y.values; ok = ~bad.values & np.isfinite(yv)
         for Y in range(2021, 2027):
             cut = pd.Timestamp(f"{Y}-01-01", tz="UTC"); te = (X.index >= cut) & (X.index < pd.Timestamp(f"{Y+1}-01-01", tz="UTC"))
