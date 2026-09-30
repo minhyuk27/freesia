@@ -159,7 +159,7 @@ if __name__ == "__main__":
     P("\n===== z0.33 단독 거래당 순수익(bp, 비용·펀딩 후) × 스톱 슬리피지")
     for nm, T in TT.items():
         for s_in in (2e-4, 5e-4, 10e-4, 20e-4):
-            L = lw_events(T, s_in); yr = pd.Series(L.ret.values, index=(D0 + pd.to_timedelta(L.e, unit="min")).year)
+            L = lw_events(T, s_in); yr = pd.Series(L.ret.values, index=(D0 + pd.to_timedelta(L.e, unit="min")).dt.year.values)
             wr = yr.groupby(level=0).mean() * 1e4
             P(f"  {nm} s={s_in*1e4:4.0f}bp 전체 {L.ret.mean()*1e4:+6.1f}bp 승률 {(L.ret>0).mean()*100:.0f}% | " + " ".join(f"{y%100}:{v:+.0f}" for y, v in wr.items()))
     # 결합 계좌
