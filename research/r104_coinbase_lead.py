@@ -72,9 +72,10 @@ if __name__ == "__main__":
                 SIG[(s, h, fn)] = dd
         P(f"  {s} 완료 ({time.time()-t_:.0f}s)")
     O = pd.DataFrame(rows); pd.set_option("display.width", 250); pd.set_option("display.max_rows", 200)
-    from statsmodels.stats.multitest import multipletests
     from scipy.stats import norm
-    pv = 2 * (1 - norm.cdf(np.abs(O.t_te))); O["bh"] = multipletests(pv, 0.05, "fdr_bh")[0]
+    pv = 2 * (1 - norm.cdf(np.abs(O.t_te.values))); o = np.argsort(pv); m = len(pv)
+    ok = pv[o] <= 0.05 * np.arange(1, m + 1) / m; kmax = np.nonzero(ok)[0].max() + 1 if ok.any() else 0
+    bh = np.zeros(m, bool); bh[o[:kmax]] = True; O["bh"] = bh
     P(f"\n검정 {len(O)}개. 평가 |t|≥3: {(O.t_te.abs()>=3).sum()} · BH 통과 {O.bh.sum()} · 학습·평가 IC 부호 일치 {O.same.mean():.0%}")
     P("\n===== 평가 |t| 상위 25"); P(O.reindex(O.t_te.abs().sort_values(ascending=False).index).head(25).round(3).to_string(index=False))
     P("\n===== 평가 거래 bp 상위 15 (학습에서도 양수인 것)"); P(O[O.bp_tr > 0].sort_values("bp_te", ascending=False).head(15).round(2).to_string(index=False))
