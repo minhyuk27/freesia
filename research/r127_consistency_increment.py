@@ -241,7 +241,7 @@ def mr24_scan(o, h, l, c, vwap, thr, Hi, reg_ok, pen, touch_eps, hold):
         elif o[t] < dn: side = 1
         if side == 0: continue
         lvl = up if side < 0 else dn
-        px = lvl * (1 - side * pen)   # 관통(매수는 더 비싸게, 매도는 더 싸게 — 불리한 방향)
+        px = lvl * (1 + side * pen)   # 관통(롱은 더 비싸게 체결, 숏은 더 싸게 체결 — 항상 불리한 방향)
         ad = px; xi = t + hold; xp = c[t + hold]; mkx = False
         for j in range(t + 1, t + hold + 1):
             if side == 1 and l[j] < ad: ad = l[j]
