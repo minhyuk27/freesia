@@ -75,10 +75,11 @@ def walkforward_sideways(D, FE, h, years=range(2021, 2027)):
         tr = D[(D.t < pd.Timestamp(f"{Y}-01-01", tz="UTC") - pd.Timedelta(days=1)) & (D.y >= 0)]
         te = D[(D.yr == Y) & (D.y >= 0)]
         if len(tr) < 300 or len(te) == 0: continue
+        feats = [c for c in FE if tr[c].notna().any()]       # 초기 연도는 G6(파생) 등이 전부 결측 — 전부 결측인 열은 그 폴드만 제외
         models = [HistGradientBoostingClassifier(max_iter=300, learning_rate=0.04, max_leaf_nodes=31, min_samples_leaf=200,
-                                                   l2_regularization=1.0, random_state=sd).fit(tr[FE].values, tr.y.values) for sd in range(3)]
-        p_tr = np.mean([m.predict_proba(tr[FE].values) for m in models], axis=0)
-        p_te = np.mean([m.predict_proba(te[FE].values) for m in models], axis=0)
+                                                   l2_regularization=1.0, random_state=sd).fit(tr[feats].values, tr.y.values) for sd in range(3)]
+        p_tr = np.mean([m.predict_proba(tr[feats].values) for m in models], axis=0)
+        p_te = np.mean([m.predict_proba(te[feats].values) for m in models], axis=0)
         D.loc[te.index, "p_side"] = p_te[:, 2]
         thr10, thr20 = np.quantile(p_tr[:, 2], 0.9), np.quantile(p_tr[:, 2], 0.8)
         D.loc[te.index, "active10"] = p_te[:, 2] >= thr10
