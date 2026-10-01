@@ -86,7 +86,7 @@ def ic_report(feat, y, dates, lag):
     sign_all = np.sign(rows["전체"]["ic"]) if np.isfinite(rows["전체"]["ic"]) else 0
     same = []
     for qq in sorted(set(q)):
-        m = (q == qq).values
+        m = np.asarray(q == qq)
         f = feat[m]; yy = y[m]; ok = np.isfinite(f) & np.isfinite(yy)
         if ok.sum() < 15: continue
         icq = spearmanr(f[ok], yy[ok])[0]
