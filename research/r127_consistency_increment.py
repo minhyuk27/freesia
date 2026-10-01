@@ -194,8 +194,11 @@ def vol_regime(sym):
 
 
 def tag_regime(sym, ts):
-    reg = vol_regime(sym); day = pd.DatetimeIndex(ts).normalize()
-    return reg.reindex(day).values
+    """ts: tz 유무 상관없이 받아 UTC로 맞춘 뒤 날짜 단위로 reg(전일까지 30/365일 변동성 비)를 붙인다.
+    (.values로 꺼낸 배열은 tz 정보가 사라져 tz-aware reg.index와 바로 reindex하면 전부 NaN이 되는 버그가 있었다 — 수정.)"""
+    reg = vol_regime(sym); day = pd.DatetimeIndex(ts)
+    day = day.tz_localize("UTC") if day.tz is None else day.tz_convert("UTC")
+    return reg.reindex(day.normalize()).values
 
 
 def mk_B12(mode, g, H, label):
