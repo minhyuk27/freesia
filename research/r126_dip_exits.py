@@ -166,7 +166,7 @@ if __name__ == "__main__":
     cand = O[~O.a_bankrupt & ~O.b_bankrupt].dropna(subset=["a_shw"])
     if len(cand):
         best = cand.sort_values(["a_shw", "a_posw"], ascending=False).iloc[0]
-        P(f"\n[선택] {best.variant} pc{best.pc}bp {best.size}: 2022-24 샤프{best.a_shw:.2f} 양주{best.a_posw:.0f}% | "
+        P(f"\n[선택] {best.variant} pc{best.pc}bp {best['size']}: 2022-24 샤프{best.a_shw:.2f} 양주{best.a_posw:.0f}% | "
           f"2025-26 양주{best.b_posw:.0f}% 중앙{best.b_medw:+.1f}% 25pct{best.b_p25w:+.1f}% 최악{best.b_worstw:+.1f}% 샤프{best.b_shw:.2f} 양월{best.b_posm:.0f}% 월중앙{best.b_medm:+.1f}%")
         # 최선 변형 딥 사건 재생성·저장 (엔진 표준 컬럼)
         Eb = events_full[best.variant]
