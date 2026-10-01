@@ -23,7 +23,7 @@ if __name__ == "__main__":
     T8 = J.add_funding(J.breakout_trades(J.TOP8)); T8["lf"] = K.last_funding(T8)
     T8 = T8[~(T8.lf > 1e-4)].reset_index(drop=True)                      # 펀딩 필터(현행과 같음)
     BK = K.events(T8, False).drop(columns="lf"); BK["side"] = 1
-    ts = J.D0 + pd.to_timedelta(BK.e, unit="min"); BK["ts"] = ts.values; BK["yr"] = ts.dt.year.values
+    ts = J.D0 + pd.to_timedelta(BK.e, unit="min"); BK["ts"] = ts; BK["yr"] = ts.dt.year.values
     X = pd.DataFrame(index=BK.index)
     X["cfg"] = T8.cfg.astype("category").cat.codes.values; X["a"] = T8.a.values; X["hr"] = ts.dt.hour.values; X["isbtc"] = (BK.s == 0).astype(float).values
     for c in NF.NEWF + ["vreg", "r60", "r240", "r1440"]: X[c] = np.nan
