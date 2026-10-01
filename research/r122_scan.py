@@ -3,7 +3,7 @@
 조건(진입 분 − 1까지, 종목별): R119 새 특징 24개 + 가격·변동성(1h·4h·1d·7d 수익, 20일선 괴리, 1h 변동성, 1h/1d 변동성 비, 1d 범위 내 위치)
   + 변동성 국면(30일/365일, 전일) + 파생(직전 펀딩, 프리미엄 지수·60분 변화, OI 60·240분 변화, 상위 트레이더 롱숏비, 계정 롱숏비, 테이커 롱숏비)
   + 일간(스테이블코인 7일 증가, 공포탐욕 — 모두 다음 날부터).
-구간 경계 = 학습(2020~23) 거래의 분위(인과적 고정). 통계 = 진입일별 평균 수익의 일간 평균·t(같은 날 거래 군집 보정).
+구간 경계 = 학습(2020~23) 거래의 분위(인과적 고정). 통계 = 거래당 평균 + 보유 기간 블록 군집 강건 t(2026-10-01 수정 — 이전 진입일 평균 t는 겹치는 보유에서 부풀었다).
 3단 분할: 학습 2020~23 / 검증 2024 / 시험 2025~2026-09.
 사전 선택 규칙: 학습 일수 ≥ 100, 학습 t ≥ max(3, 위약 95%), 검증 평균 > 0 & 검증 t ≥ 1.5. 시험은 보고만(선택에 쓰지 않음).
 위약: 메커니즘마다 학습 거래의 조건 행을 무작위로 섞어(조건 간 상관 유지) 같은 스캔 10회 → 최대 t의 95% 분위.
@@ -46,15 +46,20 @@ def panel(sym):
     return pd.concat([F, Xd], axis=1)
 
 
-def daystats(day, ret, mask, nd_min=30):
-    """진입일별 평균 → (일간 평균, t, 일수) for 학습/검증/시험."""
+def daystats(day, ret, mask, nd_min=30, blk=None):
+    """구간별 (거래당 평균, 군집 t, 군집 수). 군집 = 보유 기간 블록(blk 일 단위 정수 배열, 기본 진입일).
+    2026-10-01 수정: 진입일 평균 t는 (1) 보유가 겹치는 메커니즘에서 t를 부풀리고 (2) 거래가 적은 극단일에 과대 가중했다 —
+    계좌는 거래 단위로 손익이 나므로 거래 가중 평균 + 군집 강건 표준오차로 바꾼다."""
+    b = day if blk is None else blk
     out = []
     for lo_, hi_ in ((0, D_TR), (D_TR, D_VA), (D_VA, 10 ** 9)):
         m = mask & (day >= lo_) & (day < hi_)
-        if m.sum() == 0: out += [np.nan, np.nan, 0]; continue
-        d = day[m]; s = np.bincount(d - lo_, weights=ret[m]); n = np.bincount(d - lo_); ok = n > 0
-        v = s[ok] / n[ok]; nd = len(v)
-        out += [v.mean(), v.mean() / v.std() * np.sqrt(nd) if nd > 2 and v.std() > 0 else np.nan, nd]
+        n = int(m.sum())
+        if n == 0: out += [np.nan, np.nan, 0]; continue
+        r = ret[m]; mu = r.mean(); g = b[m] - b[m].min()
+        cs = np.bincount(g, weights=r - mu); ncl = int((np.bincount(g) > 0).sum())
+        se = np.sqrt((cs ** 2).sum()) / n
+        out += [mu, mu / se if se > 0 and ncl > 2 else np.nan, ncl]
     return out
 
 
@@ -80,7 +85,9 @@ if __name__ == "__main__":
     BUCK = (("Q1", 0.2, "lo"), ("L30", 0.3, "lo"), ("H30", 0.7, "hi"), ("Q5", 0.8, "hi"))
     for mi_, (mech, g) in enumerate(T.groupby("mech", sort=True)):
         ix = g.index.values; d = day[ix]; r = ret[ix]; X = FX[ix]; tr = d < D_TR
-        base = daystats(d, r, np.ones(len(ix), bool))
+        hold_d = max(1, int(np.ceil(np.median(T.x.values[ix] - T.e.values[ix]) / 1440)))
+        bl = (T.e.values[ix] // (1440 * hold_d)).astype(np.int64)
+        base = daystats(d, r, np.ones(len(ix), bool), blk=bl)
         rows.append(dict(mech=mech, feat="(없음)", buck="전체", n=len(ix), tr_mu=base[0], tr_t=base[1], tr_nd=base[2], va_mu=base[3], va_t=base[4], te_mu=base[6], te_t=base[7], te_nd=base[8]))
         edges = {}
         for j, f in enumerate(feats):
@@ -97,7 +104,7 @@ if __name__ == "__main__":
             return res
         cand = []
         for j, b, mk in scan(X):
-            st = daystats(d, r, mk)
+            st = daystats(d, r, mk, blk=bl)
             cand.append(dict(mech=mech, feat=feats[j], buck=b, n=int(mk.sum()), tr_mu=st[0], tr_t=st[1], tr_nd=st[2], va_mu=st[3], va_t=st[4], va_nd=st[5],
                              te_mu=st[6], te_t=st[7], te_nd=st[8]))
         # 위약: 학습 거래의 조건 행을 섞는다 → 최대 학습 t
@@ -108,9 +115,10 @@ if __name__ == "__main__":
             mx = -np.inf
             for j, b, mk in scan(Xp):
                 m2 = mk & tr
-                if m2.sum() == 0: continue
-                dd = d[m2]; s = np.bincount(dd, weights=r[m2]); n = np.bincount(dd); ok = n > 0; v = s[ok] / n[ok]
-                if len(v) > 30 and v.std() > 0: mx = max(mx, v.mean() / v.std() * np.sqrt(len(v)))
+                if m2.sum() < 50: continue
+                rr = r[m2]; mu = rr.mean(); gg = bl[m2] - bl[m2].min(); cs = np.bincount(gg, weights=rr - mu)
+                se = np.sqrt((cs ** 2).sum()) / len(rr)
+                if se > 0 and (np.bincount(gg) > 0).sum() > 30: mx = max(mx, mu / se)
             nulls.append(mx)
         null95 = float(np.quantile(nulls, 0.95))
         for c in cand: c["null95"] = null95
