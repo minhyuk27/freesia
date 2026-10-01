@@ -130,8 +130,11 @@ if __name__ == "__main__":
     pd.set_option("display.width", 260); pd.set_option("display.max_rows", 200)
     C = O[O.feat != "(없음)"]
     P(f"\n후보 {len(C):,} · 학습 t≥3 {(C.tr_t >= 3).sum():,} · 위약 문턱 통과 {(C.tr_t >= np.maximum(3, C.null95)).sum():,} · 검증까지 통과 {C['pass'].sum():,}")
-    S = O[O["pass"]].copy(); S["bp_tr"] = S.tr_mu * 1e4; S["bp_va"] = S.va_mu * 1e4; S["bp_te"] = S.te_mu * 1e4
-    S["fam"] = S.mech.str.split().str[0] + " " + S.mech.str[-1]
+    S = O[O["pass"]].copy()
+    if len(S) == 0:
+        P("통과 후보 없음"); P(f"완료 ({time.time()-t_:.0f}s)"); sys.exit(0)
+    S["bp_tr"] = S.tr_mu * 1e4; S["bp_va"] = S.va_mu * 1e4; S["bp_te"] = S.te_mu * 1e4
+    S["fam"] = S.mech.astype(str).str.split().str[0] + " " + S.mech.astype(str).str[-1]
     P("통과 수(계열·방향별): " + ", ".join(f"{k} {v}" for k, v in S.fam.value_counts().items()))
     P("\n===== 통과 후보 (시험 2025~26은 보고만) — 메커니즘·방향별 학습 t 상위")
     P(S.sort_values("tr_t", ascending=False).groupby("fam").head(12)[["mech", "feat", "buck", "n", "tr_nd", "bp_tr", "tr_t", "null95", "bp_va", "va_t", "bp_te", "te_t", "te_nd"]].round(2).to_string(index=False))
