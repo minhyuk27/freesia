@@ -287,6 +287,7 @@ if __name__ == "__main__":
         d_etf, pk_etf = run_multi(etf_only, 3, 12, {4: 1.0}, start="2024-01-01")
         if d_etf is not None and d_core is not None:
             both = pd.concat([d_core.rename("core"), d_etf.rename("etf")], axis=1).dropna()
+            both = both[both.index >= "2024-01-01"]  # run_multi 시작 전 구간은 두 시리즈 모두 평평한 0% 채움값이라 상관계수가 부풀려짐 → 제외
             corr = both.core.corr(both.etf)
             P(f"  ETF 전략 단독(We=1): " + str({k: (round(v, 2) if isinstance(v, float) else v) for k, v in summary(d_etf).items()}))
             P(f"  core·ETF 일간 수익 상관계수 (n={len(both)}): {corr:+.3f}")
