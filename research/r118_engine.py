@@ -99,7 +99,7 @@ def run_multi(E, w, N, Wk, start="2022-01-01"):
     t0 = int(J.mins([pd.Timestamp(start, tz="UTC")])[0])
     E = E[(E.e >= t0)].sort_values(["e", "k"]).reset_index(drop=True)
     LO, HI, CL, t0 = grid_hl(t0)
-    wk = np.zeros(int(E.k.max()) + 2 if len(E) else 2)
+    wk = np.zeros(max([int(E.k.max()) if len(E) else 0] + list(Wk)) + 2)
     for k_, v in Wk.items(): wk[k_] = v
     day, pk, info = sim_multi(E.e.values.astype(np.int64), E.x.values.astype(np.int64), E.ret.values.astype(float), E.k.values.astype(np.int64),
                               E.mult.values.astype(float), E.s.values.astype(np.int64), E.px.values.astype(float), E.side.values.astype(np.int64),
