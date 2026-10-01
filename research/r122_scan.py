@@ -8,7 +8,7 @@
 사전 선택 규칙: 학습 일수 ≥ 100, 학습 t ≥ max(3, 위약 95%), 검증 평균 > 0 & 검증 t ≥ 1.5. 시험은 보고만(선택에 쓰지 않음).
 위약: 메커니즘마다 학습 거래의 조건 행을 무작위로 섞어(조건 간 상관 유지) 같은 스캔 10회 → 최대 t의 95% 분위.
 출력: data/r122_scan.parquet(전 후보), data/r122_feats.parquet(거래별 조건 — 3단계용)
-사용: python research/r122_scan.py"""
+사용: python research/r122_scan.py [접두어=r122]   (r123 등 다른 거래 목록: data/<접두어>_trades.parquet)"""
 import sys, warnings, time, gc
 from pathlib import Path
 import numpy as np, pandas as pd
@@ -59,8 +59,8 @@ def daystats(day, ret, mask, nd_min=30):
 
 
 if __name__ == "__main__":
-    t_ = time.time()
-    T = pd.read_parquet(R / "data" / "r122_trades.parquet")
+    t_ = time.time(); PFX = sys.argv[1] if len(sys.argv) > 1 else "r122"
+    T = pd.read_parquet(R / "data" / f"{PFX}_trades.parquet")
     P(f"거래 {len(T):,}, 메커니즘 {T.mech.nunique()} ({time.time()-t_:.0f}s)")
     feats = None; FX = np.full((len(T), 0), np.nan, dtype="float32")
     parts = []
@@ -74,7 +74,7 @@ if __name__ == "__main__":
     FX = np.full((len(T), len(feats)), np.nan, dtype="float32")
     for ix, v in parts: FX[ix] = v
     del parts; gc.collect()
-    pd.DataFrame(FX, columns=feats).to_parquet(R / "data" / "r122_feats.parquet", index=False)
+    pd.DataFrame(FX, columns=feats).to_parquet(R / "data" / f"{PFX}_feats.parquet", index=False)
     day = (T.e.values // 1440).astype(np.int64); ret = T.ret.values.astype(float)
     rows = []; rng = np.random.default_rng(0)
     BUCK = (("Q1", 0.2, "lo"), ("L30", 0.3, "lo"), ("H30", 0.7, "hi"), ("Q5", 0.8, "hi"))
@@ -118,7 +118,7 @@ if __name__ == "__main__":
         if mi_ % 10 == 0: P(f"  [{mi_+1}/{T.mech.nunique()}] {mech}: 기준 학습 {base[0]*1e4:+.1f}bp t{base[1]:+.1f}, 위약95 t {null95:.2f} ({time.time()-t_:.0f}s)")
     O = pd.DataFrame(rows)
     O["pass"] = (O.feat != "(없음)") & (O.tr_nd >= 100) & (O.tr_t >= np.maximum(3.0, O.null95)) & (O.va_mu > 0) & (O.va_t >= 1.5)
-    O.to_parquet(R / "data" / "r122_scan.parquet", index=False)
+    O.to_parquet(R / "data" / f"{PFX}_scan.parquet", index=False)
     pd.set_option("display.width", 260); pd.set_option("display.max_rows", 200)
     C = O[O.feat != "(없음)"]
     P(f"\n후보 {len(C):,} · 학습 t≥3 {(C.tr_t >= 3).sum():,} · 위약 문턱 통과 {(C.tr_t >= np.maximum(3, C.null95)).sum():,} · 검증까지 통과 {C['pass'].sum():,}")
