@@ -370,7 +370,17 @@ def _prep_l1(df, feats, tr_mask, te_mask):
     return Xtr_s, Xte_s
 
 
+def avail_feats(df, feats, tr_mask, min_n=50):
+    """R131 avail_feats와 동일 관행: 학습 폴드가 작을 때(예 워크포워드 2022-only) 그 구간 전부
+    NaN인 특징(예 2023-06 이후만 있는 liq_snap 등)이 있으면 HistGB 비닝 자체가 깨짐 — 제외."""
+    n = max(min_n, int(0.05 * int(tr_mask.sum())))
+    nn = df.loc[tr_mask, feats].notna().sum(axis=0)
+    out = [f for f, k in zip(feats, (nn >= n).values) if k]
+    return out if out else list(feats)
+
+
 def fit_predict(df, feats, label01, tr_mask, te_mask, kind, seed=SEED, min_leaf=300):
+    feats = avail_feats(df, feats, tr_mask)
     ytr = label01[tr_mask]
     if kind == "hgb":
         Xtr = df.loc[tr_mask, feats].values.astype(np.float32)
