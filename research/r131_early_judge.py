@@ -214,6 +214,14 @@ def net_bp(cont, pred_dir, X):
     return np.where(correct, X - CT - CM, -X - 2 * CT), correct
 
 
+def avail_feats(tr, min_n=50):
+    """학습 구간에서 결측 아닌 값이 충분한 특징만 사용(2022만 학습일 때 agg1s·bookDepth 특징은
+    2023-01 이전 데이터가 전부 NaN이라 HistGB 비닝(구간화)이 자체적으로 깨짐 — 전부/거의 전부
+    결측인 열은 제외). r120/r90b와 동일한 관행."""
+    n = max(min_n, int(0.05 * len(tr)))
+    return [c for c in FCOLS if tr[c].notna().sum() >= n]
+
+
 def walk_forward(EV, y, X):
     sub = EV[(EV.y == y) & (EV.X == X)].copy()
     sub["pred"] = np.nan; sub["conf"] = np.nan; sub["pred_dir"] = 0
@@ -222,9 +230,10 @@ def walk_forward(EV, y, X):
     for Y in (2023, 2024, 2025, 2026):
         tr = sub[sub.yr < Y]; te = sub[sub.yr == Y]
         if len(tr) < 100 or len(te) < 10: continue
-        m = hgb(SEED).fit(tr[FCOLS].values, tr.cont.values)
-        p_tr = m.predict_proba(tr[FCOLS].values)[:, 1]
-        p_te = m.predict_proba(te[FCOLS].values)[:, 1]
+        fu = avail_feats(tr)
+        m = hgb(SEED).fit(tr[fu].values, tr.cont.values)
+        p_tr = m.predict_proba(tr[fu].values)[:, 1]
+        p_te = m.predict_proba(te[fu].values)[:, 1]
         q50, q20, q10 = np.quantile(np.abs(p_tr - 0.5), [0.5, 0.8, 0.9])
         idx = te.index
         sub.loc[idx, "pred"] = p_te
@@ -269,9 +278,10 @@ def permute_null(EV, y, X, n_perm=20):
             for yr_ in tr.yr.unique():
                 m = (tr.yr.values == yr_)
                 shuf[m] = rng.permutation(shuf[m])
-            mdl = hgb(SEED + perm + 1).fit(tr[FCOLS].values, shuf)
-            p_tr = mdl.predict_proba(tr[FCOLS].values)[:, 1]
-            p_te = mdl.predict_proba(te[FCOLS].values)[:, 1]
+            fu = avail_feats(tr)
+            mdl = hgb(SEED + perm + 1).fit(tr[fu].values, shuf)
+            p_tr = mdl.predict_proba(tr[fu].values)[:, 1]
+            p_te = mdl.predict_proba(te[fu].values)[:, 1]
             q20 = np.quantile(np.abs(p_tr - 0.5), 0.8)
             sel = np.abs(p_te - 0.5) >= q20
             pred_dir = np.where(p_te > 0.5, 1, -1)
@@ -351,9 +361,10 @@ if __name__ == "__main__":
     bsub = EV[(EV.y == by) & (EV.X == bx)]
     btr = bsub[bsub.yr < 2025]; bte = bsub[bsub.yr == 2025]
     if len(btr) >= 100 and len(bte) >= 10:
-        bm = hgb(SEED).fit(btr[FCOLS].values, btr.cont.values)
-        pim = permutation_importance(bm, bte[FCOLS].values, bte.cont.values, n_repeats=5, random_state=SEED, scoring="roc_auc")
-        imp = pd.DataFrame({"feature": FCOLS, "importance": pim.importances_mean}).sort_values("importance", ascending=False)
+        bfu = avail_feats(btr)
+        bm = hgb(SEED).fit(btr[bfu].values, btr.cont.values)
+        pim = permutation_importance(bm, bte[bfu].values, bte.cont.values, n_repeats=5, random_state=SEED, scoring="roc_auc")
+        imp = pd.DataFrame({"feature": bfu, "importance": pim.importances_mean}).sort_values("importance", ascending=False)
         P(imp.head(10).round(4).to_string(index=False))
     else:
         P("  2025년 표본 부족 — 중요도 생략")
