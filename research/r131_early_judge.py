@@ -148,7 +148,6 @@ def add_features(sym, df, A):
     out["d24_hi_s"] = sd * (A["close"][fidx] / A["rmax"][fidx] - 1)
     out["d24_lo_s"] = sd * (A["close"][fidx] / A["rmin"][fidx] - 1)
     out["ret4h_s"] = sd * A["ret4h"][fidx]
-    out["osc"] = df.osc.values.astype(np.float64)
     panel = RF.minute_panel(sym, fidx)
     for fn in RF.FEAT_NAMES:
         for L in RF.LOOKBACKS:
