@@ -290,9 +290,15 @@ if __name__ == "__main__":
         P(sel2.sort_values("dist", ascending=False).head(20)[["period", "L", "feat", "phase", "n_g", "n_c", "es", "auc"]].round(3).to_string(index=False))
         TT.to_parquet(R / "data" / "r129_sig.parquet", index=False)
         P(f"저장: data/r129_sig.parquet ({len(TT)}행, 심볼별 비집계)")
+    if len(DD):
+        DD.to_parquet(R / "data" / "r129_sig_dir.parquet", index=False)
+        P(f"저장: data/r129_sig_dir.parquet ({len(DD)}행, 심볼별 비집계, DIRECTION 원본)")
     if len(DDg):
         P("\n-- DIRECTION |z|>2 (방향 신호 — 사전 신호면 매매적 의미, 사후면 그냥 결과 확인) --")
         sig = DDg[(DDg.z.abs() > 2) & (DDg.tier == "전체등급")]
         P(sig.sort_values("z", key=lambda s: s.abs(), ascending=False).head(30).round(3).to_string(index=False))
+        P("\n-- DIRECTION, onset 이전(before)만, 가격 자체(ret/absret/othret 제외) — 진짜 '사전 조짐' 후보만 --")
+        pre = DDg[(DDg.phase == "before") & (DDg.tier == "전체등급") & (DDg.period == "전체") & (~DDg.feat.isin(["ret", "absret"]))]
+        P(pre.sort_values("z", key=lambda s: s.abs(), ascending=False).round(3).to_string(index=False))
     (R / "logs" / "r129.summary").write_text(f"R129 완료 ({time.time()-t0:.0f}s)\n")
     P(f"\n전체 완료 ({time.time()-t0:.0f}s)")
