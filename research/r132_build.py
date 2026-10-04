@@ -291,7 +291,7 @@ def build_cross(sym, minutes, CROSS, FAM, SIGNED):
 
 # ============================================================ 룩어헤드 검증 ============================================================
 
-LOOKAHEAD_LOOKBACK = 760000  # 가장 긴 롤링(봉해상도 ~500봉 × 1d=1440분) 을 전부 덮는 여유 — 1440의 배수로 내림(모든 시간대 봉 경계 정렬 유지)
+LOOKAHEAD_LOOKBACK = 1080000  # EMA200(span=200, adjust=False) 가 1d 시간대에서 웜업 잔류오차 <0.1%가 되려면 ~700봉×1440분 필요(750봉 여유) — 1440의 배수
 
 
 def lookahead_check(K, FEATALL, n_sample=50, seed=SEED):

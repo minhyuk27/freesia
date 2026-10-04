@@ -331,7 +331,8 @@ def classical_indicators(o, h, l, c, v):
 
     # A/D 라인 기울기, 포스 인덱스, 엘더 레이
     ad = mfv.cumsum()
-    out["ad_slope"] = ((ad - ad.shift(20)) / (ad.abs().rolling(200, min_periods=20).mean() + EPS)).values
+    ad_diff = ad - ad.shift(20)  # 차분은 누적합의 임의 시작점과 무관(= 최근 20봉 mfv 합) — 분모도 반드시 차분형 척도로 정규화할 것
+    out["ad_slope"] = (ad_diff / (mfv.abs().rolling(200, min_periods=20).mean() * 20 + EPS)).values
     fi = diff * V
     out["force_idx13"] = (_ema(fi, 13) / (C * V.rolling(50, min_periods=5).mean() + EPS)).values
     ema13 = _ema(C, 13)
