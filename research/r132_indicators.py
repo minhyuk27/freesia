@@ -166,21 +166,22 @@ def _supertrend_nb(h, l, c, atr, mult):
     n = len(c)
     side = np.zeros(n, np.int8)
     st = np.full(n, np.nan)
-    if n < 2:
-        return side, st
-    up = (h[0] + l[0]) / 2 + mult * atr[0]
-    dn = (h[0] + l[0]) / 2 - mult * atr[0]
-    s = 1
-    for i in range(1, n):
+    up = np.nan; dn = np.nan; s = 1; started = False
+    for i in range(n):
         if np.isnan(atr[i]):
             continue
         basic_up = (h[i] + l[i]) / 2 + mult * atr[i]
         basic_dn = (h[i] + l[i]) / 2 - mult * atr[i]
-        up2 = basic_up if (basic_up < up or c[i - 1] > up) else up
-        dn2 = basic_dn if (basic_dn > dn or c[i - 1] < dn) else dn
-        if s == 1 and c[i] < dn2: s = -1
-        elif s == -1 and c[i] > up2: s = 1
-        up, dn = up2, dn2
+        if not started:
+            # ATR 웜업 구간(NaN)에서는 밴드를 전혀 못 갱신 — up/dn이 NaN으로 "동결"되면 이후
+            # 모든 비교(x < nan, x > nan)가 항상 False라 side 가 영원히 안 바뀌는 버그가 있었음.
+            # ATR 이 처음 유효해지는 봉에서 밴드를 새로 시작해 해결.
+            up, dn = basic_up, basic_dn; started = True
+        else:
+            up = basic_up if (basic_up < up or c[i - 1] > up) else up
+            dn = basic_dn if (basic_dn > dn or c[i - 1] < dn) else dn
+            if s == 1 and c[i] < dn: s = -1
+            elif s == -1 and c[i] > up: s = 1
         side[i] = s
         st[i] = dn if s == 1 else up
     return side, st
