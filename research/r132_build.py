@@ -49,6 +49,27 @@ def utc(ix):
     return ix.tz_convert("UTC") if ix.tz is not None else ix.tz_localize("UTC")
 
 
+def _rss_mb():
+    try:
+        with open("/proc/self/status") as f:
+            for line in f:
+                if line.startswith("VmRSS:"):
+                    return int(line.split()[1]) / 1024.0
+    except Exception:
+        pass
+    return -1.0
+
+
+def _trim():
+    """gc 뒤에도 glibc 가 해제된 힙을 OS에 안 돌려줄 수 있어 malloc_trim 으로 강제(메모리 여유가 적은 oracle1 대책)."""
+    gc.collect()
+    try:
+        import ctypes
+        ctypes.CDLL("libc.so.6").malloc_trim(0)
+    except Exception:
+        pass
+
+
 @numba.njit(cache=True)
 def first_touch(entry_idx, h, l, c, X, Wn):
     """entry_idx[q] 분 종가(=진입가) 기준, 다음 분부터 Wn분 안에 ±X% 중 어느 쪽을 먼저 터치하는가.
@@ -166,8 +187,8 @@ def compute_features(sym, minutes, K, FAM, SIGNED, t0):
             FAM[name] = f"TA_{tf}"
             if short in I.TA_SIGNED: SIGNED.add(name)
         del blk, oo, hh, ll, cc, vv
-        gc.collect()
-    P(f"    {sym} family1(TA, 6개 시간대) 완료 ({time.time()-t0:.0f}s)")
+        _trim()
+    P(f"    {sym} family1(TA, 6개 시간대) 완료, RSS={_rss_mb():.0f}MB ({time.time()-t0:.0f}s)")
 
     # ---- family2: 레벨 ----
     lvl = I.level_features(ts_full, o, h, l, c, v, ROUND_STEPS[sym])
@@ -176,8 +197,8 @@ def compute_features(sym, minutes, K, FAM, SIGNED, t0):
         cols[name] = arr[minutes]
         FAM[name] = "LVL"
         if short in I.LVL_SIGNED: SIGNED.add(name)
-    del lvl; gc.collect()
-    P(f"    {sym} family2(LVL) 완료 ({time.time()-t0:.0f}s)")
+    del lvl; _trim()
+    P(f"    {sym} family2(LVL) 완료, RSS={_rss_mb():.0f}MB ({time.time()-t0:.0f}s)")
 
     # ---- family3: 미시구조(R129 재사용, 룩백 1/5/10/30/60) ----
     panel = RF.minute_panel(sym, minutes, lookbacks=MICRO_LB)
@@ -187,8 +208,10 @@ def compute_features(sym, minutes, K, FAM, SIGNED, t0):
         FAM[name] = "MS"
         base = col.rsplit("_", 1)[0]
         if base in RF.SIGNED: SIGNED.add(name)
-    del panel; gc.collect()
-    P(f"    {sym} family3(MS) 완료 ({time.time()-t0:.0f}s)")
+    del panel
+    RF._CACHE.clear()  # r129_feats 가 심볼당 "roll"(15feat×5lookback 전체길이) 등을 모듈 전역에 영구 캐시 — 안 지우면 심볼 누적으로 OOM
+    _trim()
+    P(f"    {sym} family3(MS) 완료, RSS={_rss_mb():.0f}MB ({time.time()-t0:.0f}s)")
 
     # ---- family4: 파생상품·포지셔닝 ----
     drv = I.derivatives_features(sym, ts_full)
@@ -197,8 +220,8 @@ def compute_features(sym, minutes, K, FAM, SIGNED, t0):
         cols[name] = arr[minutes]
         FAM[name] = "DRV"
         if short in I.DRV_SIGNED: SIGNED.add(name)
-    del drv; gc.collect()
-    P(f"    {sym} family4(DRV) 완료 ({time.time()-t0:.0f}s)")
+    del drv; _trim()
+    P(f"    {sym} family4(DRV) 완료, RSS={_rss_mb():.0f}MB ({time.time()-t0:.0f}s)")
 
     # ---- family5: 변동성(실현변동성·vol-of-vol·R90 p/pr) ----
     rv = I.realized_vol_features(c)
@@ -210,8 +233,8 @@ def compute_features(sym, minutes, K, FAM, SIGNED, t0):
     for j, short in enumerate(c90):
         cols[f"VOL_r90_{short}"] = g90[:, j]; FAM[f"VOL_r90_{short}"] = "VOL"
     del g90, v90
-    gc.collect()
-    P(f"    {sym} family5(VOL) 완료 ({time.time()-t0:.0f}s)")
+    _trim()
+    P(f"    {sym} family5(VOL) 완료, RSS={_rss_mb():.0f}MB ({time.time()-t0:.0f}s)")
 
     # ---- family6: r97_feat + r54_dfeat(15분 격자, t_g≤m+1) + r119 newfeats(분 해상도) + ETF(1일 지연) ----
     t97, c97, v97 = I.load_grid_table(R / "data" / "r97_feat.parquet", sym)
@@ -229,20 +252,20 @@ def compute_features(sym, minutes, K, FAM, SIGNED, t0):
         cols[name] = g54[:, j]; FAM[name] = "EXT"
         if short in EXT_SIGNED_SHORT: SIGNED.add(name)
     del g54, v54, t54
-    gc.collect()
+    _trim()
     cnew, vnew = I.newfeats_grid(sym, ts_full)
     for j, short in enumerate(cnew):
         name = f"EXT_NEWF_{short}"
         cols[name] = vnew[minutes, j]; FAM[name] = "EXT"
         if f"NEWF_{short}" in EXT_SIGNED_SHORT: SIGNED.add(name)
-    del vnew; gc.collect()
+    del vnew; _trim()
     etf = I.load_etf_flows()
     col97 = "btc_total" if sym == "BTCUSDT" else "eth_total"
     s_etf = etf[col97].astype(float)
     cols["EXT_etf_flow"] = I.daily_asof(s_etf, ts_full)[minutes]; FAM["EXT_etf_flow"] = "EXT"
     sz = (s_etf - s_etf.rolling(90, min_periods=10).mean()) / (s_etf.rolling(90, min_periods=10).std() + 1e-9)
     cols["EXT_etf_flow_z90"] = I.daily_asof(sz, ts_full)[minutes]; FAM["EXT_etf_flow_z90"] = "EXT"; SIGNED.add("EXT_etf_flow_z90")
-    P(f"    {sym} family6(EXT) 완료 ({time.time()-t0:.0f}s)")
+    P(f"    {sym} family6(EXT) 완료, RSS={_rss_mb():.0f}MB ({time.time()-t0:.0f}s)")
 
     # ---- family7: 계절성 ----
     seas = I.seasonality_features(ts_full[minutes])
@@ -312,7 +335,7 @@ def lookahead_check(K, FEATALL, n_sample=50, seed=SEED):
             a, b = arr[local_m], prod[name]
             if not (np.isnan(a) and np.isnan(b)) and not np.isclose(a, b, rtol=1e-3, atol=1e-4):
                 n_fail += 1; fail_detail.append((sym, m, name, float(a), float(b)))
-        del lvl; gc.collect()
+        del lvl; _trim()
 
     P(f"\n===== 룩어헤드 검증: {len(pool)}개 (sym,m) 표본, 특징값 비교 {checked_cols}개, 불일치 {n_fail}개")
     if fail_detail:
@@ -391,11 +414,11 @@ def main():
         dfp = pd.DataFrame(cols); dfp.insert(0, "m", mins); dfp.insert(0, "sym", sym)
         FEAT_PARTS.append(dfp)
         del cols, cross
-        gc.collect()
+        _trim()
         P(f"[{sym}] 특징 {dfp.shape[1]-2}열 완료 ({time.time()-t0:.0f}s)")
 
     FEATALL = pd.concat(FEAT_PARTS, ignore_index=True)
-    del FEAT_PARTS; gc.collect()
+    del FEAT_PARTS; _trim()
     FEAT_COLS = [c for c in FEATALL.columns if c not in ("sym", "m")]
     P(f"\n전체 특징 {len(FEAT_COLS)}개(가족 {len(set(FAM.values()))}개) ({time.time()-t0:.0f}s)")
 
