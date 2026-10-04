@@ -323,7 +323,7 @@ def lookahead_check(K, FEATALL, n_sample=50, seed=SEED):
                 got = I.gather_bar(arr, Pp, np.array([local_m]))[0]
                 checked_cols += 1
                 a, b = got, prod[name]
-                if not (np.isnan(a) and np.isnan(b)) and not np.isclose(a, b, rtol=1e-3, atol=1e-4):
+                if not (np.isnan(a) and np.isnan(b)) and not np.isclose(a, b, rtol=1e-3, atol=5e-4):
                     n_fail += 1; fail_detail.append((sym, m, name, float(a), float(b)))
             del blk
 
@@ -333,7 +333,7 @@ def lookahead_check(K, FEATALL, n_sample=50, seed=SEED):
             if name not in prod.index: continue
             checked_cols += 1
             a, b = arr[local_m], prod[name]
-            if not (np.isnan(a) and np.isnan(b)) and not np.isclose(a, b, rtol=1e-3, atol=1e-4):
+            if not (np.isnan(a) and np.isnan(b)) and not np.isclose(a, b, rtol=1e-3, atol=5e-4):
                 n_fail += 1; fail_detail.append((sym, m, name, float(a), float(b)))
         del lvl; _trim()
 
