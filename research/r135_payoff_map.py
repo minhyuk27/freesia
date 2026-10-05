@@ -9,7 +9,7 @@
   F4 R131 예보 창 첫 0.2% 이탈 추종       F5 R123 변동성 압축 양방향 스톱(VC, 롱·숏)
   F6 R123 다일 추세(TSMOM L28, 매일 00 UTC)
 청산: 손절 d ∈ {0.2,0.3,0.4,0.5,0.75,1,1.5}%, 목표 R·d, R ∈ {1,1.5,2,3,4,6}, 최대 보유 24시간(시간 청산 종가).
-  같은 분 양쪽 → 손실. 비용: 진입 테이커 5+2bp(F3은 메이커 2bp), 목표 지정가 2bp, 손절 테이커 5+2bp, 시간 청산 테이커 7bp.
+  같은 분 양쪽 → 손실. 지정가·스톱 진입은 진입 분의 불리한 극값이 손절선을 넘으면 손절(체결 뒤로 보수 처리). 비용: 진입 테이커 5+2bp(F3은 메이커 2bp), 목표 지정가 2bp, 손절 테이커 5+2bp, 시간 청산 테이커 7bp.
   같은 가족·종목은 한 번에 한 포지션.
 고배율 제약: 레버리지 L의 청산 거리 1/L − 0.4%(유지증거금)가 d + 0.1%(슬리피지 여유)보다 커야 한다 → L_max = 1/(d + 0.5%).
 계좌: 증거금 = 자본 50%(사용자 구조), 명목 = 0.5·L·자본, 가족별 순차 복리(동시 거래는 시간순 근사). L ∈ {L_max, 켈리 최적 ≤ L_max}.
@@ -38,13 +38,18 @@ def grids():
 
 
 @numba.njit(cache=True)
-def run(e, px, sd, H, L, C, d, Rm, hold):
-    """반환 결과 코드(1 목표, 2 손절, 0 시간), 비용 전 수익, 청산 분."""
+def run(e, px, sd, H, L, C, d, Rm, hold, mode):
+    """반환 결과 코드(1 목표, 2 손절, 0 시간), 비용 전 수익, 청산 분.
+    진입 분 처리 mode: 0 시가 진입(진입 분 전체 판정), 1 지정가·스톱 진입(진입 분의 불리한 극값이 손절선을 넘으면 손절 — 체결 뒤 일어난 것으로 보수 처리), 2 종가 진입(다음 분부터)."""
     n = len(e); res = np.zeros(n, np.int8); g = np.zeros(n); xe = np.zeros(n, np.int64)
     N = len(C)
     for i in range(n):
         st = px[i] * (1 - sd[i] * d); tp = px[i] * (1 + sd[i] * Rm * d); j1 = min(N, e[i] + hold); r = 0; last = px[i]; xj = j1 - 1
-        for j in range(e[i] + 1, j1):
+        j0 = e[i] + 1
+        if mode == 1 and ((L[e[i]] <= st) if sd[i] > 0 else (H[e[i]] >= st)):
+            res[i] = 2; xe[i] = e[i]; g[i] = -d; continue
+        if mode == 0: j0 = e[i]
+        for j in range(j0, j1):
             if np.isnan(C[j]): continue
             last = C[j]
             hs = (L[j] <= st) if sd[i] > 0 else (H[j] >= st)
@@ -110,6 +115,7 @@ if __name__ == "__main__":
         Fe = Fe[np.isfinite(Fe.px.values)].reset_index(drop=True)
         yr = (J.D0 + pd.to_timedelta(Fe.e, unit="min")).dt.year.values
         entry_cost = CM if "딥" in fn else CT + SLIP
+        mode = 0 if fn[:2] in ("F0", "F1", "F6") else (2 if fn.startswith("F4") else 1)
         for d in DS:
             for Rm in RS:
                 res = np.zeros(len(Fe), np.int8); g = np.zeros(len(Fe)); xe = np.zeros(len(Fe), np.int64)
@@ -117,7 +123,7 @@ if __name__ == "__main__":
                     m = (Fe.s == s).values
                     if not m.any(): continue
                     O, H, L, C, k, mi = G[s]
-                    a, b, c = run(Fe.e.values[m].astype(np.int64), Fe.px.values[m].astype(float), Fe.sd.values[m].astype(np.int64), H, L, C, d, float(Rm), HOLD)
+                    a, b, c = run(Fe.e.values[m].astype(np.int64), Fe.px.values[m].astype(float), Fe.sd.values[m].astype(np.int64), H, L, C, d, float(Rm), HOLD, mode)
                     res[m], g[m], xe[m] = a, b, c
                 keep = np.ones(len(Fe), bool) if fn.startswith("F0") else one_at_a_time(Fe.e.values, xe, Fe.s.values)
                 cost = entry_cost + np.where(res == 1, CM, CT + SLIP)
