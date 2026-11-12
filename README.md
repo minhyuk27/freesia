@@ -6,8 +6,9 @@ Freesia는 가상자산(Binance USDT-M Futures)의 고빈도(HFT) 시장 미시�
 
 ## 1. 프로젝트 개요 (Overview)
 
-- **목적**: 틱(Tick) 및 L2 호가창(Order Book) 레벨의 고빈도 데이터를 실시간 수집·가공하고, 정보성 거래 흐름(Informed Trading)을 계량화하여 단기 알파(Alpha)를 발굴 및 실시간 페이퍼 트레이딩으로 검증
+- **목적**: 틱(Tick) 및 L2 호가창(Order Book) 레벨의 고빈도 데이터를 실시간 수집·가공하고, 정보성 거래 흐름(Informed Trading)을 계량화하여 단기 알파(Alpha) 발굴 및 실시간 페이퍼 트레이딩으로 검증
 - **대상 자산**: Binance Futures BTCUSDT, ETHUSDT
+- **개발 형태**: 1인 단독 설계 및 풀스택 리서치/시스템 개발 (기여도 100%)
 - **핵심 특징**:
   - WebSocket 기반 비동기 L2 호가창 스트리밍 및 실시간 OFI 델타 산출
   - 120개 이상의 미시구조 팩터 및 단기 예측 전략 체계적 백테스팅
@@ -46,6 +47,7 @@ Freesia는 가상자산(Binance USDT-M Futures)의 고빈도(HFT) 시장 미시�
 | **Data Processing** | Polars, Pandas, NumPy, SciPy | 대용량 L2 틱 데이터 및 분봉 고속 연산 |
 | **API & Streaming** | Binance Futures API, WebSockets | 저지연 실시간 시세 및 체결 피드 수집 |
 | **Quant Analysis** | Statsmodels, Scikit-learn | 시계열 통계 검정, Regime Switching, 머신러닝 메타라벨링 |
+| **Testing & Reliability**| Pytest | 비용/마진 모델 및 파이프라인 회귀 테스트 |
 | **System & Deploy** | Linux Systemd, POSIX Flock, Crontab | 단일 인스턴스 락 및 서비스 무중단 자동 복구 |
 
 ---
@@ -55,30 +57,54 @@ Freesia는 가상자산(Binance USDT-M Futures)의 고빈도(HFT) 시장 미시�
 ```
 freesia/
 ├── freesia/                  # 코어 패키지
-│   ├── book.py               # L2 오더북 스냅샷 및 델타 빌더
-│   ├── client.py             # 바이낸스 비동기 API 클라이언트
-│   └── ofi.py                # Order Flow Imbalance 실시간 계산 모듈
-├── research/                 # 120+ 체계적 퀀트 전략 연구 및 백테스트
-│   ├── r118_engine.py        # 다중 전략 롱·숏 복합 백테스팅 엔진
-│   ├── r122_edge_factory.py  # 팩터 발굴 및 시그널 결합 파이프라인
-│   ├── r126_vpin.py          # VPIN(거래 흐름 독성 지표) 연구
-│   └── ...                   # 모멘텀, 변동성, 펀딩비 차익, 시장조성 연구
-├── scripts/                  # 실시간 운영 스크립트
-│   ├── live_book.py          # 실시간 L2 호가 수집 및 저장 데몬
-│   ├── live_paper.py         # 실시간 시그널 생성 및 페이퍼 트레이딩 엔진
-│   ├── update_rest.py        # 5분 주기 분봉 및 펀딩비 갱신
-│   └── validate.py           # 데이터 무결성 및 누락 검증 자동화
-└── requirements.txt
+│   ├── costs.py              # Binance 선물 티어별 수수료, 마진 및 청산 모델
+│   ├── rest.py               # 바이낸스 비동기 REST API 클라이언트
+│   ├── notify.py             # 텔레그램 실시간 포지션 및 장애 알림
+│   └── store.py              # Parquet 및 HDF5 고속 스토리지 관리자
+├── research/                 # 퀀트 전략 및 미시구조 팩터 연구 (120+ 연구 스크립트)
+│   ├── r01~r135_*.py         # VPIN 독성 검정, Basis 기간구조, 마켓메이킹 백테스트
+├── scripts/                  # 과거 데이터 백필 및 시계열 수집 데몬
+│   ├── get_bookdepth.py      # 실시간 호가 깊이 수집기
+│   └── get_agg1s.py          # 1초 집계 체결 틱 수집기
+└── tests/                    # 비용/청산가 모델 및 파이프라인 단위 테스트 (Pytest)
 ```
 
 ---
 
 ## 5. 주요 엔지니어링 과제 및 해결 방안 (Engineering Highlights)
 
-1. **초저지연 L2 오더북 재구성 및 메모리 누수 방지**:
-   - WebSocket 연결 끊김 및 네트워크 지터를 견디기 위해 지수 백오프(Exponential Backoff) 자동 재연결 로직 구현
-   - 깊은 오더북 갱신 시 Python 딕셔너리 재할당 오버헤드를 줄이고 원형 큐 구조로 고속 슬라이싱
-2. **백테스트 과적합(Overfitting) 차단**:
-   - 금융 시계열의 시계열 상관성을 고려하여 Marcos López de Prado의 Purged K-Fold 및 CPCV 기법을 적용, 룩어헤드 편향(Look-ahead bias) 완전 제거
-3. **무중단 장기 가동성 보장**:
-   - POSIX `flock`을 활용하여 중복 프로세스 실행을 하드웨어 레벨에서 차단하고, 프로세스 비정상 종료 시 잠금이 즉시 해제되도록 구성
+1. **대용량 L2 호가창 원형 큐 기반 초저지연 연산**:
+   - 실시간 바이낸스 L2 Depth 스트림에서 체결 틱과 호가 잔량 변화를 분리하여 Order Flow Imbalance(OFI)를 밀리초 단위로 갱신하는 고속 파이프라인을 구축했습니다.
+2. **백테스트 과적합(Overfitting) 방지**:
+   - 금융 시계열의 자기상관성으로 인한 누수(Leakage)를 방지하기 위해 Purged / Combinatorial Purged Cross-Validation(CPCV)을 적용하여 표본외(OOS) 일반화 성능을 정밀 검증했습니다.
+3. **비용 및 청산 모델의 엄격한 반영**:
+   - VIP 티어별 메이커/테이커 수수료 및 격리마진 유지증거금률(MMR)을 반영한 엄격한 실전 비용 모델(`freesia/costs.py`)을 설계하여 가상 백테스트의 수익 왜곡을 차단했습니다.
+
+---
+
+## 6. 빠른 시작 (Quickstart)
+
+### 설치 및 환경 설정
+```bash
+git clone https://github.com/minhyuk27/freesia.git
+cd freesia
+
+# 가상환경 생성 및 의존성 설치
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt pytest
+
+# 환경변수 템플릿 복사
+cp .env.example .env
+```
+
+### 단위 테스트 실행
+```bash
+PYTHONPATH=. pytest tests/
+```
+
+---
+
+## 7. 라이선스 (License)
+
+본 프로젝트는 [MIT License](LICENSE)를 따릅니다.

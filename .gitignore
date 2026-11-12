@@ -1,6 +1,16 @@
 data/
 logs/
 .env
+.env.*
+!.env.example
 .venv/
 __pycache__/
 *.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+*.pkl
+*.parquet
+*.db
+CLAUDE.md
+.claude/
